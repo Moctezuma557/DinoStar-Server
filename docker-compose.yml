@@ -1,3 +1,5 @@
+# Local development: empty/missing keys use public defaults from .env.example.
+# Replace both keys with private values before any non-local deployment.
 services:
 
   backend:
@@ -10,7 +12,7 @@ services:
     environment:
       APP_ENV: local
       APP_DEBUG: "false"
-      APP_KEY: ${APP_KEY:?Define APP_KEY in the root .env}
+      APP_KEY: ${APP_KEY:-base64:MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=}
       APP_URL: http://localhost:8000
       LOG_CHANNEL: stderr
       SESSION_DRIVER: file
@@ -30,7 +32,7 @@ services:
       BROADCAST_CONNECTION: reverb
       REVERB_APP_ID: ${REVERB_APP_ID:-dinostar}
       REVERB_APP_KEY: ${REVERB_APP_KEY:-dinostar-local}
-      REVERB_APP_SECRET: ${REVERB_APP_SECRET:?Define REVERB_APP_SECRET in the root .env}
+      REVERB_APP_SECRET: ${REVERB_APP_SECRET:-dinostar-local-development-only}
       REVERB_HOST: reverb
       REVERB_PORT: 8080
       REVERB_SCHEME: http
@@ -62,7 +64,7 @@ services:
     environment:
       APP_ENV: local
       APP_DEBUG: "false"
-      APP_KEY: ${APP_KEY:?Define APP_KEY in the root .env}
+      APP_KEY: ${APP_KEY:-base64:MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=}
       LOG_CHANNEL: stderr
       SESSION_DRIVER: file
       CACHE_STORE: file
@@ -71,7 +73,7 @@ services:
       BROADCAST_CONNECTION: reverb
       REVERB_APP_ID: ${REVERB_APP_ID:-dinostar}
       REVERB_APP_KEY: ${REVERB_APP_KEY:-dinostar-local}
-      REVERB_APP_SECRET: ${REVERB_APP_SECRET:?Define REVERB_APP_SECRET in the root .env}
+      REVERB_APP_SECRET: ${REVERB_APP_SECRET:-dinostar-local-development-only}
       REVERB_HOST: reverb
       REVERB_PORT: 8080
       REVERB_SCHEME: http

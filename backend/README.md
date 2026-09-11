@@ -1,14 +1,30 @@
 # DinoStar: Laravel y Reverb (actividad #6)
 
-Desde la raiz del repositorio, con Docker Desktop en modo Linux y Docker Compose 2.17 o posterior:
+Desde la raiz del repositorio (donde esta docker-compose.yml), con Docker en modo Linux y Docker Compose 2.17 o posterior. No se necesita PHP ni Composer instalado en el equipo.
+
+Primera vez: copiar la plantilla SIN sobrescribir un .env existente:
+
+```bash
+# Linux / macOS / Git Bash
+test -f .env || cp .env.example .env
+```
 
 ```powershell
-# Solo la primera vez: genera .env privado sin sobrescribir uno existente.
-./reverb/prepare-env.ps1
+# Windows PowerShell
+if (-not (Test-Path .env)) { Copy-Item .env.example .env }
+```
+
+En cualquier sistema:
+
+```text
 docker compose up -d --build --wait backend reverb
 docker compose ps
-./reverb/verify.ps1
+curl -f http://localhost:8000/
 ```
+
+Para levantar tambien el frontend integrado por el equipo, omitir `backend reverb` del comando de arranque. La comprobacion WebSocket automatizada sigue disponible en PowerShell: `./reverb/verify.ps1`.
+
+La plantilla y Compose incluyen claves PUBLICAS validas solo para desarrollo local. Compose tambien utiliza esos valores si las variables estan vacias o no existe .env. No son credenciales de produccion. Para generar claves privadas en una instalacion local nueva, se puede ejecutar `./reverb/prepare-env.ps1` ANTES de copiar la plantilla; el script conserva cualquier .env existente. Si se cambia una clave, recrear ambos servicios con `docker compose up -d --force-recreate --wait backend reverb` para que reciban los mismos valores.
 
 Laravel queda en http://localhost:8000 y su comprobacion de salud en http://localhost:8000/up. Reverb escucha WebSocket en localhost:8080 (no es una pagina web). Los contenedores se llaman `dinostar-backend` y `dinostar-reverb`.
 
@@ -16,11 +32,13 @@ Ambos usan PHP 8.4 con `pcntl`, `pdo_pgsql` y las extensiones requeridas por Lar
 
 La prueba abre un WebSocket, se suscribe a un canal temporal y comprueba un evento enviado desde Laravel. No escribe datos en la base. Si se cambia `REVERB_APP_KEY`, pasar el nuevo valor con `./reverb/verify.ps1 -AppKey valor`.
 
-El `.env` de la raiz suministra las claves de ambos contenedores; `backend/.env` se reserva para Artisan local y no se copia a la imagen. Nunca confirmar ninguno de esos archivos privados. Los ejemplos no contienen secretos. Sesiones y cache usan archivos, y las colas son sincronas para esta entrega: no se ejecutan migraciones ni se requiere PostgreSQL para arrancar.
+El `.env` de la raiz suministra las claves de ambos contenedores; `backend/.env` se reserva para Artisan local y no se copia a la imagen. Nunca confirmar ninguno de esos archivos privados. Sesiones y cache usan archivos, y las colas son sincronas para esta entrega: no se ejecutan migraciones ni se requiere PostgreSQL para arrancar.
 
-Los cambios de codigo requieren reconstruir las imagenes. No se montan carpetas que oculten `vendor`. Este Compose entrega unicamente Laravel y Reverb; la integracion del broker, PostgreSQL y frontend corresponde a otras actividades del equipo. Las variables de conexion a esos servicios preparan una integracion futura y no implican que existan en esta entrega. `pcntl` prepara el manejo de procesos/senales; no implementa por si mismo un cliente MQTT. La clave de base de datos se lee opcionalmente de `POSTGRES_PASSWORD`; no se incluye ninguna contrasena en Compose.
+Los cambios de codigo requieren reconstruir las imagenes. No se montan carpetas que oculten `vendor` del backend. Compose contiene Laravel, Reverb y el frontend integrado por el equipo. La integracion del broker y PostgreSQL sigue pendiente. `pcntl` prepara el manejo de procesos/senales; no implementa por si mismo un cliente MQTT. La clave de base de datos se lee opcionalmente de `POSTGRES_PASSWORD`; no se incluye ninguna contrasena de base de datos en Compose.
 
 Para consultar fallos: `docker compose logs --tail=50 backend reverb`. Para detener solo estos servicios sin borrar volumenes: `docker compose stop backend reverb`.
+
+Si aparece HTTP 500, consultar los logs antes de cambiar configuraciones. Una APP_KEY arbitraria puede tener una longitud invalida: usar una clave generada por Laravel o el valor local de la plantilla. No ejecutar `key:generate` dentro del contenedor para configurar Compose: las variables se resuelven en el equipo antes del arranque. Abrir http://localhost:8000, no http://0.0.0.0:8000; 0.0.0.0 es la direccion de escucha del servidor.
 
 Esta es una configuracion de desarrollo local con el servidor integrado de Laravel y canales publicos de prueba; no constituye un despliegue de produccion ni implementa autenticacion del dominio.
 
