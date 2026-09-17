@@ -78,3 +78,6 @@ docker-compose.integration.local.yml
 backend/AGENTS.md
 backend/CLAUDE.md
 backend/boost.json
+
+# ===== VENV =====
+simulator/venv/
