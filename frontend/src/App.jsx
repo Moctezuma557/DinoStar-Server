@@ -1,29 +1,71 @@
-import { useState } from "react";
+import {
+  BrowserRouter,
+  Routes,
+  Route,
+  Navigate,
+  Outlet,
+  useLocation,
+  useNavigate,
+} from "react-router-dom";
+
 import DashboardLayout from "./layouts/DashboardLayout";
 import { navigationItems } from "./config/navigation";
 
+import Login from "./pages/login";
+import Dashboard from "./pages/dashboard";
+import Paciente from "./pages/paciente";
 
-export default function App() {
-  const [activeItem, setActiveItem] = useState("panel");
+// Datos temporales hasta que exista la autenticación real.
+const enfermeraDemo = {
+  nombre: "Enf. M. Arismendi",
+  turno: "matutino",
+  unidad: "Medicina Interna",
+};
 
-  const vistaActual = navigationItems.find((item) => item.id === activeItem);
 
-  const enfermeraDemo = {
-    nombre: "Enf. M. Arismendi",
-    turno: "matutino",
-    unidad: "Medicina Interna",
-  };
+function AppShell() {
+  const { pathname } = useLocation();
+  const navigate = useNavigate();
+
+  const vistaActual = navigationItems.find((item) =>
+    pathname.startsWith(item.activePrefix ?? item.to)
+  );
 
   return (
     <DashboardLayout
-      title={vistaActual?.label}
-      activeItem={activeItem}
+      title={vistaActual?.label ?? "DinoStar"}
+      activeItem={vistaActual?.id}
       user={enfermeraDemo}
       badges={{ alertasActivas: 2 }}
-      onNavigate={(id) => setActiveItem(id)}
-      onLogout={() => console.log("cerrar sesión")}
+      onNavigate={(_id, to) => navigate(to)}
+      onLogout={() => navigate("/login")}
     >
-      <p>Área de contenido. Cada vista del sistema se renderiza aquí.</p>
+      <Outlet />
     </DashboardLayout>
+  );
+}
+
+
+function VistaEnConstruccion() {
+  return <p>Esta vista todavía no está disponible.</p>;
+}
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        {}
+        <Route path="/login" element={<Login />} />
+
+        <Route path="/" element={<Navigate to="/dashboard" replace />} />
+
+        {/* Dentro del layout */}
+        <Route element={<AppShell />}>
+          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/paciente/:id" element={<Paciente />} />
+          <Route path="*" element={<VistaEnConstruccion />} />
+        </Route>
+      </Routes>
+    </BrowserRouter>
   );
 }

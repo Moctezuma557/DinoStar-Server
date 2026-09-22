@@ -1,0 +1,83 @@
+# ===== LARAVEL =====
+backend/vendor/
+backend/.env
+backend/.env.backup
+backend/.env.production
+backend/storage/logs/
+backend/storage/framework/cache/
+backend/storage/framework/sessions/
+backend/storage/framework/views/
+backend/bootstrap/cache/
+backend/public/hot
+backend/public/storage
+
+# ===== REACT / NODE =====
+frontend/node_modules/
+frontend/.env
+frontend/.env.local
+frontend/.env.production
+frontend/dist/
+frontend/build/
+
+# ===== PYTHON =====
+simulator/__pycache__/
+simulator/*.pyc
+simulator/.env
+simulator/venv/
+simulator/.venv/
+
+# ===== DOCKER =====
+*.log
+.docker/
+
+# ===== BASE DE DATOS =====
+*.sql.backup
+*.dump
+
+# ===== SISTEMA OPERATIVO =====
+# Mac
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+*~
+
+# ===== EDITORES =====
+# VS Code
+.vscode/
+*.code-workspace
+
+# JetBrains
+.idea/
+*.iml
+
+# Vim
+*.swp
+*.swo
+
+# ===== SEGURIDAD =====
+*.pem
+*.key
+*.cert
+*.crt
+.env*
+!.env.example
+
+# Local integration configuration, kept outside the activity #6 delivery.
+docker-compose.integration.local.yml
+
+# Local assistant setup; not required to run the application.
+backend/AGENTS.md
+backend/CLAUDE.md
+backend/boost.json
+
+# ===== VENV =====
+simulator/venv/

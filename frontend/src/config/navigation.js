@@ -2,12 +2,13 @@ export const navigationItems = [
   {
     id: "panel",
     label: "Panel Principal",
-    to: "/",
+    to: "/dashboard",
   },
   {
     id: "pacientes",
     label: "Pacientes",
     to: "/pacientes",
+    activePrefix: "/paciente",
   },
   {
     id: "reportes",

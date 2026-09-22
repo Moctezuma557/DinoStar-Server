@@ -1,34 +1,44 @@
+# Local development: empty/missing keys use public defaults from .env.example.
+# Replace both keys with private values before any non-local deployment.
 services:
 
-  # ===== BROKER MQTT =====
   broker:
     image: eclipse-mosquitto:2
     container_name: dinostar-broker
     ports:
-      - "1883:1883"   #  <== MQTT
-      - "9001:9001"   # <== WebSocket MQTT (por si se necesita)
+      - "1883:1883"
+      - "9001:9001"
     volumes:
       - ./broker/mosquitto.conf:/mosquitto/config/mosquitto.conf
       - mosquitto_data:/mosquitto/data
       - mosquitto_log:/mosquitto/log
     restart: unless-stopped
 
-  # ===== BASE DE DATOS =====
   database:
     image: postgres:15
     container_name: dinostar-db
     environment:
       POSTGRES_DB: dinostar_rex
       POSTGRES_USER: dinostar
-      POSTGRES_PASSWORD: dinostar2026
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dinostar-local-development-only}
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - type: bind
+        source: ./database/init.sql
+        target: /docker-entrypoint-initdb.d/init.sql
+        read_only: true
+        bind:
+          create_host_path: false
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
     restart: unless-stopped
 
-  # ===== BACKEND LARAVEL =====
   backend:
     build:
       context: ./backend
@@ -37,37 +47,108 @@ services:
     ports:
       - "8000:8000"
     environment:
+      APP_ENV: local
+      APP_DEBUG: "false"
+      APP_KEY: ${APP_KEY:-base64:MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=}
+      APP_URL: http://localhost:8000
+      LOG_CHANNEL: stderr
+      SESSION_DRIVER: file
+      CACHE_STORE: file
+      QUEUE_CONNECTION: sync
+
       DB_CONNECTION: pgsql
       DB_HOST: database
       DB_PORT: 5432
       DB_DATABASE: dinostar_rex
       DB_USERNAME: dinostar
-      DB_PASSWORD: dinostar2026
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-dinostar-local-development-only}
+
       MQTT_HOST: broker
       MQTT_PORT: 1883
+
+      BROADCAST_CONNECTION: reverb
+      REVERB_APP_ID: ${REVERB_APP_ID:-dinostar}
+      REVERB_APP_KEY: ${REVERB_APP_KEY:-dinostar-local}
+      REVERB_APP_SECRET: ${REVERB_APP_SECRET:-dinostar-local-development-only}
+      REVERB_HOST: reverb
+      REVERB_PORT: 8080
+      REVERB_SCHEME: http
+
     depends_on:
-      - database
-      - broker
-    volumes:
-      - ./backend:/var/www/html
+      database:
+        condition: service_healthy
+
+    healthcheck:
+      test: ["CMD", "php", "-r", "exit(@file_get_contents('http://127.0.0.1:8000/up') === false ? 1 : 0);"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
     restart: unless-stopped
 
-  # ===== FRONTEND REACT =====
+
+  reverb:
+    build:
+      context: ./reverb
+      dockerfile: Dockerfile
+      additional_contexts:
+        backend: service:backend
+
+    container_name: dinostar-reverb
+
+    command: php artisan reverb:start --host=0.0.0.0 --port=8080
+
+    ports:
+      - "8080:8080"
+
+    environment:
+      APP_ENV: local
+      APP_DEBUG: "false"
+      APP_KEY: ${APP_KEY:-base64:MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=}
+      LOG_CHANNEL: stderr
+      SESSION_DRIVER: file
+      CACHE_STORE: file
+      QUEUE_CONNECTION: sync
+
+      BROADCAST_CONNECTION: reverb
+      REVERB_APP_ID: ${REVERB_APP_ID:-dinostar}
+      REVERB_APP_KEY: ${REVERB_APP_KEY:-dinostar-local}
+      REVERB_APP_SECRET: ${REVERB_APP_SECRET:-dinostar-local-development-only}
+      REVERB_HOST: reverb
+      REVERB_PORT: 8080
+      REVERB_SCHEME: http
+
+    depends_on:
+      backend:
+        condition: service_healthy
+
+    healthcheck:
+      test: ["CMD", "php", "-r", "exit(@fsockopen('127.0.0.1', 8080) === false ? 1 : 0);"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+    restart: unless-stopped
+
+
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+
     container_name: dinostar-frontend
+
     ports:
       - "5173:5173"
-    depends_on:
-      - backend
+
     volumes:
       - ./frontend:/app
       - /app/node_modules
+
     restart: unless-stopped
 
-# ===== VOLÚMENES PERSISTENTES =====
 volumes:
   postgres_data:
   mosquitto_data:
