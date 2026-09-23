@@ -1,0 +1,304 @@
+:root {
+  /* valores oficiales de la paleta */
+  --color-primario: #5a9bd5;
+  --color-secundario: #1a365d;
+  --color-terciario: #10b981;
+  --color-neutral: #64748b;
+
+  --color-primario-suave: #dcebf8;
+  --color-primario-oscuro: #4a87be;
+
+  /* Colores de estado clinico */
+  --color-normal: #10b981;
+  --color-atencion: #f59e0b;
+  --color-alerta: #dc2626;
+
+  /* Fondos tenues de cada estado, para tarjetas y avisos */
+  --color-normal-suave: #ecfdf5;
+  --color-atencion-suave: #fffbeb;
+  --color-alerta-suave: #fef2f2;
+
+  /* Fondos y superficies */
+  --color-fondo: #eef4fc;
+  --color-superficie: #ffffff;
+  --color-superficie-alt: #f7fafe;
+
+  /* Texto*/
+  --color-texto: #1e293b;
+  --color-texto-secundario: #64748b;
+  --color-texto-inverso: #ffffff;
+
+  /* Bordes y relieve*/
+  --color-borde: #dbe7f5;
+  --color-borde-fuerte: #c3d6ee;
+
+  --sombra-panel:
+    0 1px 2px rgba(26, 54, 93, 0.06), 0 1px 3px rgba(26, 54, 93, 0.05);
+  --sombra-foco: 0 0 0 3px rgba(90, 155, 213, 0.25);
+
+  /* Radios */
+  --radio-sm: 6px;
+  --radio-md: 10px;
+  --radio-lg: 14px;
+  --radio-pildora: 999px;
+
+  --espacio-1: 4px;
+  --espacio-2: 8px;
+  --espacio-3: 12px;
+  --espacio-4: 16px;
+  --espacio-5: 20px;
+  --espacio-6: 24px;
+  --espacio-8: 32px;
+  --espacio-10: 40px;
+
+  /* ---- Tipografía ---- */
+  --fuente-principal:
+    "Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", Roboto,
+    sans-serif;
+
+  --texto-xs: 0.75rem; /* 12 px · etiquetas */
+  --texto-sm: 0.8125rem; /* 13 px · metadatos */
+  --texto-md: 0.875rem; /* 14 px · cuerpo e interfaz */
+  --texto-lg: 1rem; /* 16 px · título de tarjeta */
+  --texto-xl: 1.25rem; /* 20 px · título de vista */
+  --texto-2xl: 1.5rem; /* 24 px · título principal */
+
+  --peso-regular: 400;
+  --peso-medio: 500;
+  --peso-semibold: 600;
+  --peso-bold: 700;
+
+  --interlineado-corto: 1.25;
+  --interlineado-normal: 1.5;
+
+  /* Layout */
+  --ancho-sidebar: 248px;
+  --alto-header: 64px;
+  --ancho-minimo-app: 1280px;
+
+  /* Movimiento */
+  --transicion-rapida: 120ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --transicion-rapida: 0ms;
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--fuente-principal);
+  font-size: var(--texto-md);
+  font-weight: var(--peso-regular);
+  line-height: var(--interlineado-normal);
+  color: var(--color-texto);
+  background-color: var(--color-fondo);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1,
+h2,
+h3,
+h4,
+p,
+figure {
+  margin: 0;
+}
+
+ul,
+ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+img,
+svg,
+video {
+  display: block;
+  max-width: 100%;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-primario);
+  outline-offset: 2px;
+  border-radius: var(--radio-sm);
+}
+
+h1,
+h2,
+h3,
+h4 {
+  color: var(--color-secundario);
+  font-weight: var(--peso-semibold);
+  line-height: var(--interlineado-corto);
+}
+
+h1 {
+  font-size: var(--texto-2xl);
+  letter-spacing: -0.01em;
+}
+
+h2 {
+  font-size: var(--texto-xl);
+}
+
+h3 {
+  font-size: var(--texto-lg);
+}
+
+h4 {
+  font-size: var(--texto-md);
+}
+
+small,
+.texto-secundario {
+  font-size: var(--texto-xs);
+  color: var(--color-texto-secundario);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--espacio-2);
+  min-height: 40px;
+  padding: var(--espacio-2) var(--espacio-5);
+  border: 1px solid transparent;
+  border-radius: var(--radio-md);
+  font-size: var(--texto-md);
+  font-weight: var(--peso-medio);
+  line-height: 1;
+  white-space: nowrap;
+  transition:
+    background-color var(--transicion-rapida),
+    border-color var(--transicion-rapida),
+    color var(--transicion-rapida);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Accion principal de la pantalla*/
+.btn--primario {
+  background-color: var(--color-primario);
+  color: var(--color-texto-inverso);
+}
+
+.btn--primario:hover:not(:disabled) {
+  background-color: var(--color-primario-oscuro);
+}
+
+/* Accion de apoyo */
+.btn--secundario {
+  background-color: var(--color-primario-suave);
+  color: var(--color-secundario);
+}
+
+.btn--secundario:hover:not(:disabled) {
+  background-color: #cfe2f5;
+}
+
+/* Accion terciaria o de bajo enfasis */
+.btn--contorno {
+  background-color: var(--color-superficie);
+  border-color: var(--color-borde-fuerte);
+  color: var(--color-texto);
+}
+
+.btn--contorno:hover:not(:disabled) {
+  border-color: var(--color-primario);
+  color: var(--color-secundario);
+}
+
+.input {
+  display: block;
+  width: 100%;
+  min-height: 40px;
+  padding: var(--espacio-2) var(--espacio-3);
+  border: 1px solid var(--color-borde-fuerte);
+  border-radius: var(--radio-md);
+  background-color: var(--color-superficie);
+  color: var(--color-texto);
+  font-size: var(--texto-md);
+  transition:
+    border-color var(--transicion-rapida),
+    box-shadow var(--transicion-rapida);
+}
+
+.input::placeholder {
+  color: var(--color-texto-secundario);
+}
+
+.input:focus {
+  outline: none;
+  border-color: var(--color-primario);
+  box-shadow: var(--sombra-foco);
+}
+
+.input:disabled {
+  background-color: var(--color-superficie-alt);
+  color: var(--color-texto-secundario);
+  cursor: not-allowed;
+}
+
+/* Campo con error de validacion */
+.input--error {
+  border-color: var(--color-alerta);
+}
+
+.input--error:focus {
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.2);
+}
+
+/* Etiqueta y bloque de campo */
+.campo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-2);
+}
+
+.campo-etiqueta {
+  font-size: var(--texto-sm);
+  font-weight: var(--peso-medio);
+  color: var(--color-secundario);
+}
