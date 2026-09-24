@@ -1,0 +1,288 @@
+:root {
+  --color-primario: #5A9BD5;
+  --color-secundario: #1A365D;
+  --color-terciario: #10B981;
+  --color-neutral: #64748B;
+  --fondo-app: #F0F4F8;
+  --fondo-tarjeta: #FFFFFF;
+}
+
+body {
+  margin: 0;
+  font-family: 'Plus Jakarta Sans', sans-serif, system-ui;
+  background-color: var(--fondo-app);
+}
+
+.contenedor-paciente-vista {
+  padding: 30px;
+  max-width: 1200px;
+  margin: 0 auto;
+  box-sizing: border-box;
+}
+
+/* Tarjeta Superior de Paciente */
+.tarjeta-info-superior {
+  background: var(--fondo-tarjeta);
+  border-radius: 16px;
+  padding: 24px 30px;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  box-shadow: 0 10px 25px rgba(26, 54, 93, 0.05);
+  margin-bottom: 24px;
+}
+
+
+
+.detalles-principales-paciente {
+  flex: 1;
+}
+
+.fila-titulo-paciente {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 6px;
+}
+
+.fila-titulo-paciente h2 {
+  color: var(--color-secundario);
+  font-size: 22px;
+  margin: 0;
+  font-weight: 700;
+}
+
+.insignia-permeable {
+  background-color: rgba(16, 185, 129, 0.12);
+  color: var(--color-terciario);
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.subdetalles-paciente {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  color: var(--color-neutral);
+  font-size: 13px;
+  align-items: center;
+}
+
+.separador-punto {
+  color: #CBD5E1;
+}
+
+/* Tarjeta Principal de Infusión */
+.tarjeta-infusion-principal {
+  background: var(--fondo-tarjeta);
+  border-radius: 20px;
+  padding: 30px;
+  box-shadow: 0 15px 35px rgba(26, 54, 93, 0.06);
+}
+
+.cabecera-canal {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 8px;
+}
+
+.texto-canal-pequeno {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--color-primario);
+  letter-spacing: 0.5px;
+}
+
+.titulo-solucion {
+  color: var(--color-secundario);
+  font-size: 18px;
+  margin: 4px 0 0 0;
+  font-weight: 700;
+}
+
+.insignia-cateter {
+  background-color: #F1F5F9;
+  color: var(--color-secundario);
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.estado-curso-barra {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background-color: rgba(16, 185, 129, 0.1);
+  color: var(--color-terciario);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 12px;
+  border-radius: 20px;
+  margin-bottom: 24px;
+}
+
+.punto-verde-pequeno {
+  width: 8px;
+  height: 8px;
+  background-color: var(--color-terciario);
+  border-radius: 50%;
+  display: inline-block;
+}
+
+/* Grid Monitoreo Interno */
+.grid-monitoreo {
+  display: grid;
+  grid-template-columns: 230px 1fr; 
+  gap: 24px;
+  align-items: center; /* Centra verticalmente la bolsa respecto a las métricas de la derecha */
+}
+
+
+.caja-visual-bolsa {
+  background: linear-gradient(180deg, #EBF3FC 0%, #3B82F6 100%);
+  border-radius: 40px; 
+  padding: 16px 10px;
+  width: 180px;         
+  height: 250px;        
+  margin: 0 auto;       
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: center;
+  color: white;
+  box-sizing: border-box;
+  text-align: center;
+  box-shadow: 0 8px 20px rgba(59, 130, 246, 0.2); /* Sutil sombreado para darle relieve */
+}
+
+.capacidad-total {
+  font-size: 12px;
+  font-weight: 600;
+  background: rgba(0,0,0,0.15);
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.porcentaje-texto {
+  font-size: 32px;
+  font-weight: 800;
+  display: block;
+}
+
+.ml-restantes {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.etiqueta-solucion-footer {
+  font-size: 12px;
+  font-weight: 600;
+  background: rgba(255,255,255,0.2);
+  padding: 4px 10px;
+  border-radius: 6px;
+}
+
+.columna-metricas-controles {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.fila-metricas-doble {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.card-metrica-item {
+  background-color: #F8FAFC;
+  border-radius: 14px;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.label-metrica {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--color-neutral);
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+  display: block;
+}
+
+.valor-metrica-num {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--color-secundario);
+  margin-bottom: 6px;
+}
+
+.valor-metrica-num span {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-neutral);
+}
+
+.sub-estado-metrica {
+  font-size: 12px;
+  color: var(--color-neutral);
+}
+
+.sub-estado-metrica.verde {
+  color: var(--color-terciario);
+  font-weight: 600;
+}
+
+.barra-progreso-vtbi {
+  width: 100%;
+  height: 6px;
+  background-color: #E2E8F0;
+  border-radius: 3px;
+  margin: 6px 0;
+  overflow: hidden;
+}
+
+.progreso-relleno {
+  height: 100%;
+  background-color: var(--color-primario);
+}
+
+/* Panel inferior */
+.panel-inferior-controles {
+  background-color: #F8FAFC;
+  border-radius: 14px;
+  padding: 16px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.caja-estado-actual {
+  display: flex;
+  flex-direction: column;
+}
+
+.badge-activo-curso {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-secundario);
+}
+
+.botones-accion-grupo {
+  display: flex;
+  gap: 10px;
+}
+
+
+

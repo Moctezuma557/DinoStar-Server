@@ -1,0 +1,181 @@
+:root {
+  --color-primario: #5A9BD5;
+  --color-secundario: #1A365D;
+  --color-terciario: #10B981;
+  --color-neutral: #64748B;
+  --fondo-app: #F0F4F8;
+  --fondo-tarjeta: #FFFFFF;
+}
+
+body {
+  margin: 0;
+  font-family: 'Plus Jakarta Sans', sans-serif, system-ui;
+  background-color: var(--fondo-app);
+}
+
+.contenedor-dashboard-vista {
+  padding: 30px;
+  max-width: 1200px;
+  margin: 0 auto;
+  box-sizing: border-box;
+}
+
+/* Cabecera */
+.cabecera-dashboard {
+  background: var(--fondo-tarjeta);
+  border-radius: 16px;
+  padding: 20px 30px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  box-shadow: 0 10px 25px rgba(26, 54, 93, 0.05);
+  margin-bottom: 24px;
+}
+
+/* Estilo para el nombre grande de la enfermera en la cabecera */
+.titulo-seccion-enfermera h1 {
+  color: var(--color-secundario);
+  font-size: 24px;
+  margin: 0;
+  font-weight: 700;
+}
+
+.info-enfermera-turno {
+  background-color: #F8FAFC;
+  padding: 10px 16px;
+  border-radius: 12px;
+  text-align: right;
+}
+
+.texto-turno {
+  display: flex;
+  flex-direction: column;
+}
+
+.texto-turno strong {
+  color: var(--color-secundario);
+  font-size: 14px;
+}
+
+.texto-turno span {
+  color: var(--color-neutral);
+  font-size: 11px;
+}
+
+.estado-vacio-dashboard {
+  background: var(--fondo-tarjeta);
+  border-radius: 20px;
+  padding: 60px 20px;
+  text-align: center;
+  box-shadow: 0 15px 35px rgba(26, 54, 93, 0.04);
+}
+
+.estado-vacio-dashboard h3 {
+  color: var(--color-secundario);
+  font-size: 20px;
+  margin: 0 0 8px 0;
+  font-weight: 700;
+}
+
+/* Grid de Tarjetas de Pacientes */
+.grid-tarjetas-pacientes {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 20px;
+}
+
+.tarjeta-paciente-resumen {
+  background: var(--fondo-tarjeta);
+  border-radius: 16px;
+  padding: 22px;
+  box-shadow: 0 10px 25px rgba(26, 54, 93, 0.05);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  transition: transform 0.2s ease;
+}
+
+.tarjeta-paciente-resumen:hover {
+  transform: translateY(-3px);
+}
+
+.card-header-paciente {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.badge-estado-estable {
+  background-color: rgba(16, 185, 129, 0.12);
+  color: var(--color-terciario);
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.badge-cama {
+  background-color: #F1F5F9;
+  color: var(--color-secundario);
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.card-body-paciente h3 {
+  color: var(--color-secundario);
+  font-size: 18px;
+  margin: 0 0 2px 0;
+  font-weight: 700;
+}
+
+.card-body-paciente p {
+  color: var(--color-neutral);
+  font-size: 13px;
+  margin: 0 0 16px 0;
+}
+
+.info-infusion-resumen {
+  background-color: #F8FAFC;
+  border-radius: 10px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.info-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--color-neutral);
+}
+
+.info-row strong {
+  color: var(--color-secundario);
+}
+
+.card-footer-paciente {
+  border-top: 1px solid #F1F5F9;
+  padding-top: 14px;
+}
+
+.btn-ver-detalle {
+  width: 100%;
+  padding: 10px;
+  background-color: var(--color-primario);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.btn-ver-detalle:hover {
+  background-color: #4b85bc;
+}
