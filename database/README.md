@@ -112,6 +112,63 @@ DINOSTAR_MIGRATION_TEST=1 php artisan test --compact tests/Feature/DomainMigrati
 
 Sin esa variable, las pruebas PostgreSQL se omiten; no confundir omision con exito.
 
+## Datos demo (tarea #35)
+
+Desde la raiz del repositorio, con Docker encendido:
+
+```text
+docker compose up -d --build --wait
+docker compose exec backend php artisan migrate --no-interaction
+docker compose exec backend php artisan db:seed --no-interaction
+```
+
+`db:seed` llama a `DemoSeeder` y crea una enfermera (`enfermera@dinostar.com`,
+password `password` almacenado con bcrypt), turno MATUTINO, activa; diez pacientes
+Paciente 01..10 en Sala A, camas cama-01..cama-10; dos sesiones ACTIVA para los
+primeros dos pacientes, NORMAL_GOTEO de 500 ml y MICRO_GOTEO de 250 ml; cinco
+lecturas por sesion (diez en total), entre 20 y 60 gotas/minuto y volumen decreciente.
+
+Para estos ejemplos se asumen factores de 20 gotas/ml en NORMAL y 60 en MICRO.
+El tiempo restante se calcula como ceil(vol_restante * factor / gotas_por_min).
+Los timestamps simulan cinco muestras separadas por un segundo desde el inicio;
+no representan mediciones reales ni prescriben parametros clinicos.
+
+El seeder solo funciona en APP_ENV local/testing, incluso con --force. No depende
+de Faker ni requiere instalar dependencias dev dentro del contenedor. No se
+ejecuta automaticamente al arrancar: correr el comando una vez tras las migraciones.
+Los datos persisten al recrear contenedores mientras se conserve el volumen.
+
+Se reservan IDs negativos -35001..-35010 por tabla para identificar los registros
+demo sin afectar las secuencias de IDs positivos. Una segunda ejecucion conserva
+los registros existentes, incluidos passwords, estados y lecturas modificados.
+No reactiva sesiones finalizadas ni reinicia las pruebas. Si se borraron registros
+demo, inserta los faltantes si no hay conflictos. Si un ID pertenece a otro
+registro, el correo ya esta ocupado o una cama/sesion activa colisiona, se detiene
+y revierte toda esa ejecucion; no borra ni sobrescribe los datos en conflicto.
+No elimina una cuenta test@example.com creada por el seeder anterior.
+
+En pgAdmin se puede verificar sin mostrar el hash de contrasena:
+
+```sql
+SELECT id, nombre, email, rol, turno, activo FROM usuarios WHERE id = -35001;
+SELECT id, nombre, numero_cama, sala, activo FROM pacientes
+WHERE id BETWEEN -35010 AND -35001 ORDER BY numero_cama;
+SELECT id, paciente_id, enfermera_id, modo_goteo, vol_total, estado FROM sesiones
+WHERE id IN (-35001, -35002);
+SELECT sesion_id, count(*) AS lecturas_demo FROM lecturas
+WHERE id BETWEEN -35010 AND -35001 GROUP BY sesion_id;
+```
+
+En una base nueva, los totales son 1 usuario, 10 pacientes, 2 sesiones y 10 lecturas.
+Con datos anteriores, comprobar los registros demo por los filtros anteriores.
+`verify.sql` sigue revirtiendo sus propias inserciones, pero NO elimina estos seeds:
+despues de sembrar datos ya no se esperan tablas vacias.
+Esto crea credenciales de prueba; no implementa el endpoint ni la pantalla de login.
+
+Las pruebas `DemoSeederTest.php` utilizan el mismo PostgreSQL aislado y variable
+DINOSTAR_MIGRATION_TEST explicados arriba. Verifican contenido, bcrypt, calculos,
+repeticion sin cambios, conflictos atomicos y bloqueo fuera de local/testing.
+
 ## Prueba de integridad
 
 Ejecutar solamente sobre una base de pruebas inicializada con este esquema.
