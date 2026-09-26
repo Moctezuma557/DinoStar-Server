@@ -1,15 +1,15 @@
 :root {
-  --color-primario: #5A9BD5;
-  --color-secundario: #1A365D;
-  --color-terciario: #10B981;
-  --color-neutral: #64748B;
-  --fondo-app: #F0F4F8;
-  --fondo-tarjeta: #FFFFFF;
+  --color-primario: #5a9bd5;
+  --color-secundario: #1a365d;
+  --color-terciario: #10b981;
+  --color-neutral: #64748b;
+  --fondo-app: #f0f4f8;
+  --fondo-tarjeta: #ffffff;
 }
 
 body {
   margin: 0;
-  font-family: 'Plus Jakarta Sans', sans-serif, system-ui;
+  font-family: "Plus Jakarta Sans", sans-serif, system-ui;
   background-color: var(--fondo-app);
 }
 
@@ -41,7 +41,7 @@ body {
 }
 
 .info-enfermera-turno {
-  background-color: #F8FAFC;
+  background-color: #f8fafc;
   padding: 10px 16px;
   border-radius: 12px;
   text-align: right;
@@ -116,7 +116,7 @@ body {
 }
 
 .badge-cama {
-  background-color: #F1F5F9;
+  background-color: #f1f5f9;
   color: var(--color-secundario);
   padding: 3px 10px;
   border-radius: 6px;
@@ -138,7 +138,7 @@ body {
 }
 
 .info-infusion-resumen {
-  background-color: #F8FAFC;
+  background-color: #f8fafc;
   border-radius: 10px;
   padding: 12px;
   display: flex;
@@ -159,7 +159,7 @@ body {
 }
 
 .card-footer-paciente {
-  border-top: 1px solid #F1F5F9;
+  border-top: 1px solid #f1f5f9;
   padding-top: 14px;
 }
 
@@ -178,4 +178,11 @@ body {
 
 .btn-ver-detalle:hover {
   background-color: #4b85bc;
+}
+
+/* Alertas activas · tarjeta #38 */
+.seccion-alertas-dashboard {
+  display: grid;
+  gap: var(--espacio-3);
+  margin-bottom: var(--espacio-5);
 }
