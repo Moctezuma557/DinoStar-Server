@@ -1,0 +1,119 @@
+.tarjeta-paciente-componente {
+  background-color: var(--color-superficie);
+  border-radius: var(--radio-lg);
+  padding: var(--espacio-5);
+  box-shadow: var(--sombra-panel);
+  border: 1px solid var(--color-borde);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  transition: transform var(--transicion-rapida), box-shadow var(--transicion-rapida);
+}
+
+.tarjeta-paciente-componente:hover {
+  transform: translateY(-3px);
+}
+
+
+.tarjeta-paciente-componente.estado-normal {
+  border: 3px solid var(--color-normal) !important;
+}
+
+.tarjeta-paciente-componente.estado-atencion {
+  border: 3px solid var(--color-atencion) !important;
+}
+
+.tarjeta-paciente-componente.estado-alerta {
+  border: 3px solid var(--color-alerta) !important;
+}
+
+.tarjeta-paciente-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--espacio-3);
+}
+
+.badge-cama {
+  background-color: var(--color-fondo);
+  color: var(--color-secundario);
+  padding: 3px var(--espacio-2);
+  border-radius: var(--radio-sm);
+  font-size: var(--texto-xs);
+  font-weight: var(--peso-bold);
+  text-transform: uppercase;
+}
+
+
+.indicador-estado {
+  font-size: var(--texto-xs);
+  font-weight: var(--peso-bold);
+  padding: 4px var(--espacio-2);
+  border-radius: var(--radio-pildora);
+}
+
+.indicador-estado.estado-normal {
+  background-color: var(--color-normal-suave);
+  color: var(--color-normal);
+}
+
+.indicador-estado.estado-atencion {
+  background-color: var(--color-atencion-suave);
+  color: var(--color-atencion);
+}
+
+.indicador-estado.estado-alerta {
+  background-color: var(--color-alerta-suave);
+  color: var(--color-alerta);
+}
+
+.tarjeta-paciente-body h3 {
+  color: var(--color-secundario);
+  font-size: var(--texto-lg);
+  margin: 0 0 var(--espacio-3) 0;
+  font-weight: var(--peso-bold);
+}
+
+.info-infusion-resumen {
+  background-color: var(--color-superficie-alt);
+  border-radius: var(--radio-md);
+  padding: var(--espacio-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-2);
+  margin-bottom: var(--espacio-4);
+  border: 1px solid var(--color-borde);
+}
+
+.info-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--texto-xs);
+  color: var(--color-texto-secundario);
+}
+
+.info-row strong {
+  color: var(--color-secundario);
+}
+
+.card-footer-paciente {
+  border-top: 1px solid var(--color-borde);
+  padding-top: var(--espacio-3);
+}
+
+.btn-ver-detalle {
+  width: 100%;
+  padding: var(--espacio-2);
+  background-color: var(--color-primario);
+  color: var(--color-texto-inverso);
+  border: none;
+  border-radius: var(--radio-md);
+  font-size: var(--texto-sm);
+  font-weight: var(--peso-semibold);
+  cursor: pointer;
+  transition: background-color var(--transicion-rapida);
+}
+
+.btn-ver-detalle:hover {
+  background-color: var(--color-primario-oscuro);
+}
