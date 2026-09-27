@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import TarjetaPaciente from '../components/TarjetaPaciente';
 import './dashboard.css';
-
+import AlertaBanner from '../components/AlertaBanner';
 
 export default function Dashboard() {
   const [pacientes] = useState([
@@ -34,6 +34,28 @@ export default function Dashboard() {
     }
   ]);
 
+    // Datos fijos de prueba para la tarjeta #38
+  // Se reemplazarnn por las alertas que lleguen del backend via WebSocket
+  const [alertas, setAlertas] = useState([
+    {
+      id: 1,
+      paciente: "Anna Garcia",
+      cama: "cama-06",
+      tipo: "FIN_BOLSA",
+      hora: "10:42"
+    },
+    {
+      id: 2,
+      paciente: "Carlos Martinez",
+      cama: "cama-03",
+      tipo: "GOTEO_LENTO",
+      hora: "10:15"
+    }
+  ]);
+
+  const atenderAlerta = (id) =>
+    setAlertas((previas) => previas.filter((alerta) => alerta.id !== id));
+
   return (
     <div className="contenedor-dashboard-vista">
       <div className="cabecera-dashboard">
@@ -47,7 +69,20 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
-
+             {alertas.length > 0 && (
+        <div className="seccion-alertas-dashboard">
+          {alertas.map((alerta) => (
+            <AlertaBanner
+              key={alerta.id}
+              paciente={alerta.paciente}
+              cama={alerta.cama}
+              tipo={alerta.tipo}
+              hora={alerta.hora}
+              onAtender={() => atenderAlerta(alerta.id)}
+            />
+          ))}
+        </div>
+      )}
       <div className="seccion-contenido-dashboard">
         {pacientes.length === 0 ? (
           <div className="estado-vacio-dashboard">
