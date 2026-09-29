@@ -169,6 +169,99 @@ Las pruebas `DemoSeederTest.php` utilizan el mismo PostgreSQL aislado y variable
 DINOSTAR_MIGRATION_TEST explicados arriba. Verifican contenido, bcrypt, calculos,
 repeticion sin cambios, conflictos atomicos y bloqueo fuera de local/testing.
 
+## Procesamiento de DataPackets (tarea #44)
+
+`App\Services\DataPacketService::procesar(array $data)` recibe UN paquete ya
+decodificado. Incluye los modelos Paciente, Sesion, Lectura y Alerta que faltaban
+en Develop. El listener MQTT actual sigue mostrando los paquetes en consola;
+su conexion al servicio no forma parte de esta implementacion. No se modifica
+el transporte MQTT ni se implementa broadcasting.
+
+Reconstruir el backend y ejecutar `php artisan migrate` dentro del contenedor
+antes de probar. La nueva migracion convierte gotas_por_min de integer a numeric
+sin modificar las migraciones historicas ni init.sql. Conserva datos y restricciones;
+su rollback se bloquea si existen fracciones, para no redondear lecturas guardadas.
+
+El servicio valida campos y rangos. Busca un paciente activo por numero_cama y
+su sesion ACTIVA. Sin sesion, con camas ambiguas entre salas o modo incompatible,
+registra warning sin insertar. Un paquete invalido produce ValidationException;
+el consumidor debe manejarla. El timestamp se interpreta en milisegundos UTC.
+La lectura y todas sus alertas se guardan en una transaccion. Los logs de exito
+se emiten despues del commit. No se proporcionan IDs: PostgreSQL los genera.
+
+Alertas independientes: volumen <50 produce FIN_BOLSA; gotas <15 produce
+GOTEO_LENTO; gotas >80 produce GOTEO_RAPIDO. Se crea una por condicion cumplida,
+con resuelta=false. No se recalcula el tiempo recibido ni se cambia la sesion.
+Cada llamada valida con sesion compatible inserta una lectura nueva: este contrato
+no incluye deduplicacion de reenvios ni rechazo de paquetes antiguos.
+
+### Comprobacion manual en Windows o Mac
+
+Usar una base de desarrollo con los datos demo y sesiones activas:
+
+```text
+docker compose up -d --build --wait
+docker compose exec backend php artisan migrate --no-interaction
+docker compose exec backend php artisan db:seed --no-interaction
+docker compose exec -e XDG_CONFIG_HOME=/tmp -e XDG_DATA_HOME=/tmp -e XDG_CACHE_HOME=/tmp backend php artisan tinker
+```
+
+Dentro de Tinker, ejecutar estas lineas PHP (no en PowerShell/Bash):
+
+```php
+$service = app(\App\Services\DataPacketService::class);
+$packet = ['pacienteId' => 'cama-01', 'gotasPorMin' => 32.5, 'tiempoRestante' => 245, 'volRestante' => 408.5, 'modo' => 'NORMAL_GOTEO', 'timestamp' => now()->getTimestampMs()];
+$before = [\App\Models\Lectura::count(), \App\Models\Alerta::count()];
+$service->procesar($packet);
+[\App\Models\Lectura::count() - $before[0], \App\Models\Alerta::count() - $before[1]];
+```
+
+Resultado: [1, 0]. Para probar dos alertas simultaneas:
+
+```php
+$before = [\App\Models\Lectura::count(), \App\Models\Alerta::count()];
+$service->procesar(array_replace($packet, ['gotasPorMin' => 12.3, 'volRestante' => 45.2]));
+[\App\Models\Lectura::count() - $before[0], \App\Models\Alerta::count() - $before[1]];
+```
+
+Resultado: [1, 2], FIN_BOLSA y GOTEO_LENTO. Sin sesion activa:
+
+```php
+$before = [\App\Models\Lectura::count(), \App\Models\Alerta::count()];
+$service->procesar(array_replace($packet, ['pacienteId' => 'cama-03']));
+[\App\Models\Lectura::count() - $before[0], \App\Models\Alerta::count() - $before[1]];
+exit
+```
+
+Resultado: [0, 0], siempre que cama-03 siga sin sesion activa. El seeder no
+restablece sesiones modificadas: comprobar su estado si no se obtiene el resultado.
+Estas pruebas GUARDAN datos y repetirlas agrega lecturas/alertas. No borrar volumenes.
+
+Consultar en pgAdmin, conectado a dinostar_rex:
+
+```sql
+SELECT id, sesion_id, gotas_por_min, vol_restante, tiempo_restante_min,
+       timestamp_dispositivo, created_at
+FROM public.lecturas WHERE sesion_id = -35001 ORDER BY id DESC LIMIT 10;
+SELECT id, sesion_id, tipo, mensaje, resuelta
+FROM public.alertas WHERE sesion_id = -35001 ORDER BY id DESC LIMIT 10;
+```
+
+Compose configura LOG_CHANNEL=stderr: los logs de estas llamadas aparecen en
+la terminal de Tinker. Los logs del proceso servidor se consultan con
+`docker compose logs backend`. Si se utiliza un canal basado en archivo:
+
+```text
+docker compose exec backend tail -n 60 storage/logs/laravel.log
+```
+
+Las variables XDG del comando Tinker usan directorios temporales escribibles
+por el usuario del contenedor y evitan el error de permisos en /var/www/.config/psysh.
+
+Pruebas automaticas: `tests/Feature/DataPacketServiceTest.php` utiliza el mismo
+PostgreSQL aislado y opt-in DINOSTAR_MIGRATION_TEST de la seccion anterior.
+Ejecutar junto con DomainMigrationsTest y DemoSeederTest para comprobar regresiones.
+
 ## Prueba de integridad
 
 Ejecutar solamente sobre una base de pruebas inicializada con este esquema.
