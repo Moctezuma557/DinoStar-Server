@@ -76,11 +76,12 @@ class DataPacketServiceTest extends TestCase
         $this->demo();
         foreach ([
             [32.5, 49.9, ['FIN_BOLSA']],
-            [14.9, 100, ['GOTEO_LENTO']],
-            [80.1, 100, ['GOTEO_RAPIDO']],
+            [19.9, 100, ['GOTEO_LENTO']],
+            [60.1, 100, ['GOTEO_RAPIDO']],
             [12.3, 45.2, ['FIN_BOLSA', 'GOTEO_LENTO']],
             [85.1, 45.2, ['FIN_BOLSA', 'GOTEO_RAPIDO']],
-            [15, 50, []], [80, 50, []],
+            [15, 50, ['GOTEO_LENTO']], [80, 50, ['GOTEO_RAPIDO']],
+            [20, 50, []], [60, 50, []],
         ] as [$drops, $volume, $types]) {
             $lastId = Alerta::max('id') ?? 0;
             app(DataPacketService::class)->procesar($this->packet(['gotasPorMin' => $drops, 'volRestante' => $volume]));
@@ -92,7 +93,7 @@ class DataPacketServiceTest extends TestCase
                 $this->assertNotEmpty($alert->mensaje);
             }
         }
-        $this->assertSame(17, Lectura::count());
+        $this->assertSame(19, Lectura::count());
     }
 
     public function test_missing_paused_or_finished_session_writes_nothing_and_warns(): void

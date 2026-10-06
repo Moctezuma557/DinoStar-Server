@@ -37,12 +37,12 @@ class DispositivoREX:
         
         if escenario != "aleatorio":
             self.gotasPorMin = {
-                "normal": 32.5, "lento": 12.3, "rapido": 85.1,
-                "fin-bolsa": 32.5, "combinado": 12.3,
+                "normal": 32.5, "lento": 19.9, "rapido": 60.1,
+                "fin-bolsa": 32.5, "combinado": 19.9,
             }[escenario]
         elif es_anomalia:
-            # Umbrales de DataPacketService: lento <15, rápido >80.
-            self.gotasPorMin = round(random.choice([random.uniform(10, 14.9), random.uniform(80.1, 100)]), 1)
+            # Umbrales de DataPacketService: lento <20, rápido >60.
+            self.gotasPorMin = round(random.choice([random.uniform(10, 19.9), random.uniform(60.1, 100)]), 1)
         else:
             # Condición normal
             self.gotasPorMin = round(random.uniform(20, 60), 1)

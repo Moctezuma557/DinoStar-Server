@@ -188,8 +188,8 @@ el consumidor debe manejarla. El timestamp se interpreta en milisegundos UTC.
 La lectura y todas sus alertas se guardan en una transaccion. Los logs de exito
 se emiten despues del commit. No se proporcionan IDs: PostgreSQL los genera.
 
-Alertas independientes: volumen <50 produce FIN_BOLSA; gotas <15 produce
-GOTEO_LENTO; gotas >80 produce GOTEO_RAPIDO. Se crea una por condicion cumplida,
+Alertas independientes: volumen <50 produce FIN_BOLSA; gotas <20 produce
+GOTEO_LENTO; gotas >60 produce GOTEO_RAPIDO. Se crea una por condicion cumplida,
 con resuelta=false. No se recalcula el tiempo recibido ni se cambia la sesion.
 Cada llamada valida con sesion compatible inserta una lectura nueva: este contrato
 no incluye deduplicacion de reenvios ni rechazo de paquetes antiguos.
@@ -329,6 +329,18 @@ simulator/.venv/bin/python -m pip install -r simulator/requirements.txt
 simulator/.venv/bin/python simulator/braquio_simulator.py --demo --pacientes 3 --escenario normal --ciclos 1
 ```
 
+Si aparece `unrecognized arguments` y la ayuda solo muestra `-p` y `-c`,
+el archivo ejecutado no incluye la integracion. Comprobar `git branch --show-current`
+y `git log -1 --oneline`, descargar la rama `feature/integracion-simulador-51`
+y actualizarla antes de repetir. Confirmar las opciones con:
+
+```bash
+simulator/.venv/bin/python simulator/braquio_simulator.py --help
+```
+
+Escribir `--escenario` sin espacios entre los guiones y el nombre.
+El aviso de actualizacion de pip no impide ejecutar el simulador.
+
 `--demo` fija cama-01 a NORMAL_GOTEO/500 mL y cama-02 a MICRO_GOTEO/250 mL,
 compatibles con DemoSeeder, y conserva esos modos al cambiar la bolsa.
 No modifica sesiones ni crea pacientes en la base. El resto de las camas
@@ -357,7 +369,9 @@ por lote; esperar los logs del receptor antes de consultar la base:
 En todos los casos cama-03 genera warning y no agrega registros. Los escenarios
 son opciones de prueba del generador y calculan el tiempo restante; no representan
 un tratamiento real. El modo por defecto `aleatorio` conserva la simulacion
-variable. Sus anomalias usan ahora los umbrales de #44: lento <15 y rapido >80.
+variable. Los umbrales corregidos el 06/10/2026 son lento <20 y rapido >60;
+20 y 60 exactos no generan alertas de goteo. Los escenarios lento/combinado
+usan 19.9 gotas/min y rapido usa 60.1 para probar los nuevos limites.
 
 En pgAdmin, conectado a `dinostar_rex` (localhost:5433), consultar antes y despues:
 
@@ -414,6 +428,13 @@ y se probo el recorrido real con Mosquitto y PostgreSQL 15 desechables: normal
 Despues de publicar JSON y elementos invalidos, otro lote normal agrego dos
 lecturas sin alertas y el receptor siguio activo.
 La repeticion de estas pruebas en macOS queda pendiente.
+
+El 06/10/2026 se ajustaron los limites de goteo a 20/60. La regresion en
+PostgreSQL aislado paso con 20 pruebas PHP y 245 aserciones; las 4 pruebas
+Python tambien pasaron. Se verifican 19.9 y 60.1 como alertas, y 20 y 60
+sin alertas de goteo. Los registros historicos no se recalculan ni se borran.
+Tras descargar esta correccion, reconstruir el backend con Compose y volver
+a iniciar `mqtt:listen` para cargar el servicio actualizado.
 
 Se mantiene QoS 0 y sesion MQTT limpia: el receptor debe estar conectado antes
 de publicar. No hay deduplicacion, reintentos persistentes, recuperacion de lotes

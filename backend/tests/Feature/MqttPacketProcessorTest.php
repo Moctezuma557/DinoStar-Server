@@ -70,17 +70,17 @@ class MqttPacketProcessorTest extends TestCase
                 $this->packet(),
                 $this->packet(['gotasPorMin' => 'bad']),
                 $this->packet(['pacienteId' => 'cama-03']),
-                $this->packet(['pacienteId' => 'cama-02', 'modo' => 'MICRO_GOTEO', 'gotasPorMin' => 12.3, 'volRestante' => 45.2]),
-                $this->packet(['gotasPorMin' => 85.1]),
+                $this->packet(['pacienteId' => 'cama-02', 'modo' => 'MICRO_GOTEO', 'gotasPorMin' => 19.9, 'volRestante' => 45.2]),
+                $this->packet(['gotasPorMin' => 60.1]),
             ]));
             $this->assertSame(13, Lectura::count());
             $this->assertSame(3, Alerta::count());
             $this->assertSame(['FIN_BOLSA', 'GOTEO_LENTO', 'GOTEO_RAPIDO'], Alerta::orderBy('id')->pluck('tipo')->all());
-            $this->assertSame([32.5, 12.3, 85.1], Lectura::where('id', '>', 0)->orderBy('id')->pluck('gotas_por_min')->all());
+            $this->assertSame([32.5, 19.9, 60.1], Lectura::where('id', '>', 0)->orderBy('id')->pluck('gotas_por_min')->all());
             $this->assertSame(0, Alerta::where('resuelta', true)->count());
             Log::shouldHaveReceived('warning')->with('[DataPacketService] No hay sesión activa para: cama-03')->once();
             Log::shouldHaveReceived('warning')->with('[MqttListen] DataPacket rechazado por validación.', Mockery::on(fn ($context) => $context['indice'] === 1))->once();
-            $processor->procesar('test/topic', json_encode([$this->packet(['gotasPorMin' => 15, 'volRestante' => 50]), $this->packet(['gotasPorMin' => 80, 'volRestante' => 50])]));
+            $processor->procesar('test/topic', json_encode([$this->packet(['gotasPorMin' => 20, 'volRestante' => 50]), $this->packet(['gotasPorMin' => 60, 'volRestante' => 50])]));
             $this->assertSame(15, Lectura::count());
             $this->assertSame(3, Alerta::count());
         } finally {
