@@ -5,12 +5,9 @@
   grid-template-areas:
     "sidebar header"
     "sidebar content";
-
   height: 100vh;
   overflow: hidden;
-
   min-width: var(--ancho-minimo-app);
-
   background-color: var(--color-fondo);
 }
 
@@ -130,62 +127,145 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--espacio-6);
-  padding-inline: var(--espacio-8);
+  gap: var(--espacio-5);
+  padding-inline: var(--espacio-6);
   background-color: var(--color-superficie);
   border-bottom: 1px solid var(--color-borde);
+}
+
+.headerIzquierda,
+.headerDerecha {
+  display: flex;
+  align-items: center;
+  gap: var(--espacio-4);
+  min-width: 0;
 }
 
 .viewTitle {
   font-size: var(--texto-xl);
   font-weight: var(--peso-semibold);
+  white-space: nowrap;
 }
 
-.session {
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--espacio-2);
+  padding: var(--espacio-1) var(--espacio-3);
+  border-radius: var(--radio-pildora);
+  font-size: var(--texto-xs);
+  font-weight: var(--peso-semibold);
+  white-space: nowrap;
+}
+
+.chipUbicacion {
+  background-color: var(--color-primario-suave);
+  color: var(--color-secundario);
+}
+
+.chipSync {
+  background-color: var(--color-normal-suave);
+  color: #047857;
+}
+
+.campana {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: var(--espacio-5);
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: var(--radio-md);
+  background-color: transparent;
+  color: var(--color-texto-secundario);
+  transition:
+    background-color var(--transicion-rapida),
+    color var(--transicion-rapida);
 }
 
-.sessionText {
+.campana:hover {
+  background-color: var(--color-primario-suave);
+  color: var(--color-secundario);
+}
+
+.campanaBadge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: var(--radio-pildora);
+  background-color: var(--color-alerta);
+  color: var(--color-texto-inverso);
+  font-size: 10px;
+  font-weight: var(--peso-bold);
+  line-height: 16px;
+  text-align: center;
+}
+
+.reloj {
+  display: flex;
+  align-items: center;
+  gap: var(--espacio-2);
+  padding-left: var(--espacio-4);
+  border-left: 1px solid var(--color-borde);
+  font-size: var(--texto-xs);
+  font-weight: var(--peso-medio);
+  color: var(--color-texto-secundario);
+  /* Cifras de ancho fijo: sin esto, el reloj "baila" cada segundo. */
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ---------- Sesión ---------- */
+
+.sesion {
+  display: flex;
+  align-items: center;
+  gap: var(--espacio-3);
+  padding: var(--espacio-1) var(--espacio-2);
+  border: none;
+  border-radius: var(--radio-md);
+  background-color: transparent;
+  text-align: right;
+  transition: background-color var(--transicion-rapida);
+}
+
+.sesion:hover {
+  background-color: var(--color-superficie-alt);
+}
+
+.sesionTexto {
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
   line-height: var(--interlineado-corto);
 }
 
-.sessionName {
-  font-size: var(--texto-md);
+.sesionNombre {
+  font-size: var(--texto-sm);
   font-weight: var(--peso-semibold);
   color: var(--color-secundario);
 }
 
-.sessionMeta {
-  font-size: var(--texto-xs);
+.sesionMeta {
+  font-size: 11px;
   color: var(--color-texto-secundario);
 }
 
-.logout {
+.avatar {
   display: flex;
   align-items: center;
-  gap: var(--espacio-2);
-  padding: var(--espacio-2) var(--espacio-4);
-  border: 1px solid var(--color-borde-fuerte);
-  border-radius: var(--radio-md);
-  background-color: var(--color-superficie);
-  color: var(--color-texto);
-  font-size: var(--texto-sm);
-  font-weight: var(--peso-medio);
-  transition:
-    background-color var(--transicion-rapida),
-    border-color var(--transicion-rapida),
-    color var(--transicion-rapida);
-}
-
-.logout:hover {
-  background-color: var(--color-alerta-suave);
-  border-color: var(--color-alerta);
-  color: var(--color-alerta);
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border-radius: var(--radio-pildora);
+  background-color: var(--color-primario-suave);
+  color: var(--color-secundario);
+  font-size: var(--texto-xs);
+  font-weight: var(--peso-bold);
 }
 
 .content {
