@@ -18,7 +18,7 @@ import Paciente from "./pages/paciente";
 // Datos temporales hasta que exista la autenticación real.
 const enfermeraDemo = {
   nombre: "Enf. M. Arismendi",
-  turno: "matutino",
+  estado: "Activo",
   unidad: "Medicina Interna",
 };
 
@@ -37,7 +37,9 @@ function AppShell() {
       activeItem={vistaActual?.id}
       user={enfermeraDemo}
       badges={{ alertasActivas: 2 }}
+      alertas={2}  
       onNavigate={(_id, to) => navigate(to)}
+      onAlertas={() => navigate("/alertas")}
       onLogout={() => navigate("/login")}
     >
       <Outlet />

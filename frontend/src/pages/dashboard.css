@@ -1,94 +1,184 @@
-:root {
-  --color-primario: #5a9bd5;
-  --color-secundario: #1a365d;
-  --color-terciario: #10b981;
-  --color-neutral: #64748b;
-  --fondo-app: #f0f4f8;
-  --fondo-tarjeta: #ffffff;
-}
-
-body {
-  margin: 0;
-  font-family: "Plus Jakarta Sans", sans-serif, system-ui;
-  background-color: var(--fondo-app);
-}
-
 .contenedor-dashboard-vista {
-  padding: 30px;
-  max-width: 1200px;
+  max-width: 1400px;
   margin: 0 auto;
   box-sizing: border-box;
 }
 
-/* Cabecera */
-.cabecera-dashboard {
-  background: var(--fondo-tarjeta);
-  border-radius: 16px;
-  padding: 20px 30px;
+.barra-herramientas-dashboard {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  box-shadow: 0 10px 25px rgba(26, 54, 93, 0.05);
-  margin-bottom: 24px;
+  gap: var(--espacio-3);
+  flex-wrap: wrap;
+  margin-bottom: var(--espacio-6);
 }
 
-/* Estilo para el nombre grande de la enfermera en la cabecera */
-.titulo-seccion-enfermera h1 {
+.selector-sala {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--espacio-2);
+  padding: var(--espacio-2) var(--espacio-3);
+  border: 1px solid var(--color-borde);
+  border-radius: var(--radio-md);
+  background-color: var(--color-superficie);
+  color: var(--color-texto-secundario);
+}
+
+.selector-sala-etiqueta {
+  font-size: var(--texto-xs);
+  font-weight: var(--peso-semibold);
+  letter-spacing: 0.04em;
+}
+
+.selector-sala-control {
+  appearance: none;
+  border: none;
+  background: transparent;
+  padding-right: var(--espacio-2);
+  font-size: var(--texto-sm);
+  font-weight: var(--peso-semibold);
   color: var(--color-secundario);
-  font-size: 24px;
-  margin: 0;
-  font-weight: 700;
+  cursor: pointer;
 }
 
-.info-enfermera-turno {
-  background-color: #f8fafc;
-  padding: 10px 16px;
-  border-radius: 12px;
-  text-align: right;
+.selector-sala-control:focus {
+  outline: none;
 }
 
-.texto-turno {
+.selector-sala:focus-within {
+  border-color: var(--color-primario);
+  box-shadow: var(--sombra-foco);
+}
+
+.buscador-dashboard {
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  gap: var(--espacio-2);
+  flex: 1;
+  min-width: 200px;
+  max-width: 280px;
+  padding: var(--espacio-2) var(--espacio-3);
+  border: 1px solid var(--color-borde);
+  border-radius: var(--radio-pildora);
+  background-color: var(--color-superficie);
+  color: var(--color-texto-secundario);
 }
 
-.texto-turno strong {
+.buscador-dashboard:focus-within {
+  border-color: var(--color-primario);
+  box-shadow: var(--sombra-foco);
+}
+
+.buscador-dashboard-campo {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  font-size: var(--texto-sm);
+  color: var(--color-texto);
+}
+
+.buscador-dashboard-campo:focus {
+  outline: none;
+}
+
+.buscador-dashboard-campo::placeholder {
+  color: var(--color-texto-secundario);
+}
+
+.filtro-pacientes {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--espacio-1);
+  padding: var(--espacio-1);
+  border-radius: var(--radio-pildora);
+  background-color: var(--color-superficie);
+  border: 1px solid var(--color-borde);
+}
+
+.filtro-opcion {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--espacio-2);
+  padding: var(--espacio-2) var(--espacio-4);
+  border: none;
+  border-radius: var(--radio-pildora);
+  background-color: transparent;
+  color: var(--color-texto-secundario);
+  font-size: var(--texto-sm);
+  font-weight: var(--peso-semibold);
+  white-space: nowrap;
+  transition:
+    background-color var(--transicion-rapida),
+    color var(--transicion-rapida);
+}
+
+.filtro-opcion:hover {
   color: var(--color-secundario);
-  font-size: 14px;
 }
 
-.texto-turno span {
-  color: var(--color-neutral);
+.filtro-opcion.activa {
+  background-color: var(--color-primario-suave);
+  color: var(--color-secundario);
+}
+
+.filtro-badge {
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: var(--radio-pildora);
+  background-color: var(--color-alerta);
+  color: var(--color-texto-inverso);
   font-size: 11px;
+  font-weight: var(--peso-bold);
+  line-height: 18px;
+  text-align: center;
+}
+
+.boton-registrar-paciente {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--espacio-2);
+  margin-left: auto;
+  padding: var(--espacio-3) var(--espacio-5);
+  border: none;
+  border-radius: var(--radio-pildora);
+  background-color: var(--color-secundario);
+  color: var(--color-texto-inverso);
+  font-size: var(--texto-sm);
+  font-weight: var(--peso-semibold);
+  white-space: nowrap;
+  transition: background-color var(--transicion-rapida);
+}
+
+.boton-registrar-paciente:hover {
+  background-color: #14294a;
 }
 
 .estado-vacio-dashboard {
-  background: var(--fondo-tarjeta);
-  border-radius: 20px;
+  background: var(--color-superficie);
+  border-radius: var(--radio-lg);
   padding: 60px 20px;
   text-align: center;
-  box-shadow: 0 15px 35px rgba(26, 54, 93, 0.04);
+  box-shadow: var(--sombra-panel);
 }
 
 .estado-vacio-dashboard h3 {
   color: var(--color-secundario);
-  font-size: 20px;
-  margin: 0 0 8px 0;
-  font-weight: 700;
+  font-size: var(--texto-xl);
+  margin: 0;
 }
 
-/* Grid de Tarjetas de Pacientes */
 .grid-tarjetas-pacientes {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: 20px;
+  gap: var(--espacio-5);
 }
 
 .tarjeta-paciente-resumen {
-  background: var(--fondo-tarjeta);
-  border-radius: 16px;
+  background: var(--color-superficie);
+  border-radius: var(--radio-lg);
   padding: 22px;
-  box-shadow: 0 10px 25px rgba(26, 54, 93, 0.05);
+  box-shadow: var(--sombra-panel);
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -107,39 +197,39 @@ body {
 }
 
 .badge-estado-estable {
-  background-color: rgba(16, 185, 129, 0.12);
-  color: var(--color-terciario);
+  background-color: var(--color-normal-suave);
+  color: var(--color-normal);
   padding: 3px 10px;
   border-radius: 20px;
   font-size: 11px;
-  font-weight: 700;
+  font-weight: var(--peso-bold);
 }
 
 .badge-cama {
-  background-color: #f1f5f9;
+  background-color: var(--color-superficie-alt);
   color: var(--color-secundario);
   padding: 3px 10px;
-  border-radius: 6px;
+  border-radius: var(--radio-sm);
   font-size: 11px;
-  font-weight: 700;
+  font-weight: var(--peso-bold);
 }
 
 .card-body-paciente h3 {
   color: var(--color-secundario);
   font-size: 18px;
   margin: 0 0 2px 0;
-  font-weight: 700;
+  font-weight: var(--peso-bold);
 }
 
 .card-body-paciente p {
-  color: var(--color-neutral);
+  color: var(--color-texto-secundario);
   font-size: 13px;
   margin: 0 0 16px 0;
 }
 
 .info-infusion-resumen {
-  background-color: #f8fafc;
-  border-radius: 10px;
+  background-color: var(--color-superficie-alt);
+  border-radius: var(--radio-md);
   padding: 12px;
   display: flex;
   flex-direction: column;
@@ -151,7 +241,7 @@ body {
   display: flex;
   justify-content: space-between;
   font-size: 12px;
-  color: var(--color-neutral);
+  color: var(--color-texto-secundario);
 }
 
 .info-row strong {
@@ -159,7 +249,7 @@ body {
 }
 
 .card-footer-paciente {
-  border-top: 1px solid #f1f5f9;
+  border-top: 1px solid var(--color-borde);
   padding-top: 14px;
 }
 
@@ -167,22 +257,14 @@ body {
   width: 100%;
   padding: 10px;
   background-color: var(--color-primario);
-  color: white;
+  color: var(--color-texto-inverso);
   border: none;
-  border-radius: 8px;
+  border-radius: var(--radio-sm);
   font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background-color 0.2s;
+  font-weight: var(--peso-semibold);
+  transition: background-color var(--transicion-rapida);
 }
 
 .btn-ver-detalle:hover {
-  background-color: #4b85bc;
-}
-
-/* Alertas activas · tarjeta #38 */
-.seccion-alertas-dashboard {
-  display: grid;
-  gap: var(--espacio-3);
-  margin-bottom: var(--espacio-5);
+  background-color: var(--color-primario-oscuro);
 }
