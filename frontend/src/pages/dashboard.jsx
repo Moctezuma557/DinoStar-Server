@@ -22,29 +22,62 @@ export default function Dashboard() {
     {
       id: 1,
       nombre: "Valeria Perez",
-      cama: "cama-01",
-      gotasPorMin: 32.5,
-      volRestante: 408.5,
-      tiempoRestante: 245,
+      edad: 42,
+      idPaciente: "Habitación 405-A • ID: 9104",
+      solucion: "Ringer Lactato",
+      tipoEquipo: "MICRO (60 GTT/ML)",
+      gotasPorMin: 80,
+      estadoRitmo: "Constante 1 gtt",
+      flujoActual: 80,
+      metaFlujo: 80,
+      porcentajeVolumen: 45,
+      volRestante: 225,
+      volTotal: 500,
+      tiempoRestante: "Restan est. 2h 45m",
       estado: "normal",
+      textoEstado: "GOTEO REGULAR",
+      nombreSolucion: "Solución Lactato 0.9%",
+      tipoBajante: "MICRO (10 GTT/ML)",
     },
     {
       id: 2,
       nombre: "Carlos Martinez",
-      cama: "cama-03",
-      gotasPorMin: 25.0,
-      volRestante: 150.0,
-      tiempoRestante: 90,
+      edad: 38,
+      idPaciente: "Habitación 403-B • ID: 8821",
+      solucion: "Solución Salina 0.9%",
+      tipoEquipo: "MACRO (20 GTT/ML)",
+      gotasPorMin: 25,
+      estadoRitmo: "Lento -5 gtt",
+      flujoActual: 45,
+      metaFlujo: 60,
+      porcentajeVolumen: 30,
+      volRestante: 150,
+      volTotal: 500,
+      tiempoRestante: "Restan est. 1h 30m",
       estado: "atencion",
+      textoEstado: "ATENCIÓN REQUERIDA",
+      nombreSolucion: "Solución Salina 0.9%",
+      tipoBajante: "MACRO (10 GTT/ML)",
     },
     {
       id: 3,
       nombre: "Anna Garcia",
-      cama: "cama-06",
-      gotasPorMin: 10.0,
-      volRestante: 35.0,
-      tiempoRestante: 20,
+      edad: 55,
+      idPaciente: "Habitación 406-C • ID: 7490",
+      solucion: "Glucosa al 5%",
+      tipoEquipo: "MICRO (60 GTT/ML)",
+      gotasPorMin: 10,
+      estadoRitmo: "Obstrucción detectada",
+      flujoActual: 10,
+      metaFlujo: 50,
+      porcentajeVolumen: 7,
+      volRestante: 35,
+      volTotal: 500,
+      tiempoRestante: "Restan est. 20m",
       estado: "alerta",
+      textoEstado: "ALERTA DE INFUSIÓN",
+      nombreSolucion: "Lactato Glucosado 5%",
+      tipoBajante: "MICRO (10 GTT/ML)",
     },
   ]);
 
@@ -135,15 +168,7 @@ export default function Dashboard() {
         ) : (
           <div className="grid-tarjetas-pacientes">
             {pacientesVisibles.map((paciente) => (
-              <TarjetaPaciente
-                key={paciente.id}
-                nombre={paciente.nombre}
-                cama={paciente.cama}
-                gotasPorMin={paciente.gotasPorMin}
-                volRestante={paciente.volRestante}
-                tiempoRestante={paciente.tiempoRestante}
-                estado={paciente.estado}
-              />
+              <TarjetaPaciente key={paciente.id} {...paciente} />
             ))}
           </div>
         )}
