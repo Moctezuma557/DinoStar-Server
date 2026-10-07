@@ -46,6 +46,8 @@ services:
     container_name: dinostar-backend
     ports:
       - "8000:8000"
+    volumes:
+      - ./backend:/var/www/html
     environment:
       APP_ENV: local
       APP_DEBUG: "false"
