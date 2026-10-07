@@ -1,7 +1,21 @@
-import React, { useState } from 'react';
-import TarjetaPaciente from '../components/TarjetaPaciente';
-import './dashboard.css';
-import AlertaBanner from '../components/AlertaBanner';
+import { useState } from "react";
+import TarjetaPaciente from "../components/TarjetaPaciente";
+import Icono from "../components/Icono";
+import "./dashboard.css";
+
+
+const SALAS = [
+  { id: "icu-oeste", nombre: "ICU – Ala Oeste (Adultos & Agudos)" },
+  { id: "pediatria-b", nombre: "Unidad Pediátrica B" },
+  { id: "medicina-interna", nombre: "Medicina Interna – Ala Norte" },
+];
+
+function textoBuscable(paciente) {
+  return [paciente.nombre, paciente.cama, paciente.idPaciente]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+}
 
 export default function Dashboard() {
   const [pacientes] = useState([
@@ -12,7 +26,7 @@ export default function Dashboard() {
       gotasPorMin: 32.5,
       volRestante: 408.5,
       tiempoRestante: 245,
-      estado: "normal"
+      estado: "normal",
     },
     {
       id: 2,
@@ -21,7 +35,7 @@ export default function Dashboard() {
       gotasPorMin: 25.0,
       volRestante: 150.0,
       tiempoRestante: 90,
-      estado: "atencion"
+      estado: "atencion",
     },
     {
       id: 3,
@@ -30,67 +44,97 @@ export default function Dashboard() {
       gotasPorMin: 10.0,
       volRestante: 35.0,
       tiempoRestante: 20,
-      estado: "alerta"
-    }
-  ]);
-
-    // Datos fijos de prueba para la tarjeta #38
-  // Se reemplazarnn por las alertas que lleguen del backend via WebSocket
-  const [alertas, setAlertas] = useState([
-    {
-      id: 1,
-      paciente: "Anna Garcia",
-      cama: "cama-06",
-      tipo: "FIN_BOLSA",
-      hora: "10:42"
+      estado: "alerta",
     },
-    {
-      id: 2,
-      paciente: "Carlos Martinez",
-      cama: "cama-03",
-      tipo: "GOTEO_LENTO",
-      hora: "10:15"
-    }
   ]);
 
-  const atenderAlerta = (id) =>
-    setAlertas((previas) => previas.filter((alerta) => alerta.id !== id));
+  const [sala, setSala] = useState(SALAS[0].id);
+  const [busqueda, setBusqueda] = useState("");
+  const [filtro, setFiltro] = useState("todos");
+
+  const totalAlertas = pacientes.filter((p) => p.estado === "alerta").length;
+
+  const termino = busqueda.trim().toLowerCase();
+  const pacientesVisibles = pacientes
+    .filter((p) => (filtro === "alertas" ? p.estado === "alerta" : true))
+    .filter((p) => termino === "" || textoBuscable(p).includes(termino));
 
   return (
     <div className="contenedor-dashboard-vista">
-      <div className="cabecera-dashboard">
-        <div className="titulo-seccion-enfermera">
-          <h1>Enf. M. Arismendi</h1>
+      <div className="barra-herramientas-dashboard">
+        <label className="selector-sala">
+          <span className="selector-sala-etiqueta">SALA:</span>
+          <select
+            className="selector-sala-control"
+            value={sala}
+            onChange={(evento) => setSala(evento.target.value)}
+            aria-label="Seleccionar sala"
+          >
+            {SALAS.map((opcion) => (
+              <option key={opcion.id} value={opcion.id}>
+                {opcion.nombre}
+              </option>
+            ))}
+          </select>
+          <Icono nombre="flechaAbajo" tamano={16} />
+        </label>
+
+        <div className="buscador-dashboard">
+          <Icono nombre="buscar" tamano={16} />
+          <input
+            type="search"
+            className="buscador-dashboard-campo"
+            placeholder="Buscar pacientes o número de sala..."
+            value={busqueda}
+            onChange={(evento) => setBusqueda(evento.target.value)}
+            aria-label="Buscar pacientes o número de sala"
+          />
         </div>
-        <div className="info-enfermera-turno">
-          <div className="texto-turno">
-            <strong>En turno activo</strong>
-            <span>Turno matutino • Medicina Interna</span>
-          </div>
+
+        <div
+          className="filtro-pacientes"
+          role="group"
+          aria-label="Filtrar pacientes"
+        >
+          <button
+            type="button"
+            className={`filtro-opcion ${filtro === "todos" ? "activa" : ""}`}
+            aria-pressed={filtro === "todos"}
+            onClick={() => setFiltro("todos")}
+          >
+            Todos los Pacientes
+          </button>
+          <button
+            type="button"
+            className={`filtro-opcion ${filtro === "alertas" ? "activa" : ""}`}
+            aria-pressed={filtro === "alertas"}
+            onClick={() => setFiltro("alertas")}
+          >
+            Solo Alertas
+            {totalAlertas > 0 && (
+              <span className="filtro-badge">{totalAlertas}</span>
+            )}
+          </button>
         </div>
+
+        <button type="button" className="boton-registrar-paciente">
+          <Icono nombre="agregarUsuario" tamano={16} />
+          Registrar nuevo paciente
+        </button>
       </div>
-             {alertas.length > 0 && (
-        <div className="seccion-alertas-dashboard">
-          {alertas.map((alerta) => (
-            <AlertaBanner
-              key={alerta.id}
-              paciente={alerta.paciente}
-              cama={alerta.cama}
-              tipo={alerta.tipo}
-              hora={alerta.hora}
-              onAtender={() => atenderAlerta(alerta.id)}
-            />
-          ))}
-        </div>
-      )}
+
       <div className="seccion-contenido-dashboard">
-        {pacientes.length === 0 ? (
+        {pacientesVisibles.length === 0 ? (
           <div className="estado-vacio-dashboard">
-            <h3>Sin pacientes asignados</h3>
+            <h3>
+              {pacientes.length === 0
+                ? "Sin pacientes asignados"
+                : "Ningún paciente coincide con la búsqueda"}
+            </h3>
           </div>
         ) : (
           <div className="grid-tarjetas-pacientes">
-            {pacientes.map((paciente) => (
+            {pacientesVisibles.map((paciente) => (
               <TarjetaPaciente
                 key={paciente.id}
                 nombre={paciente.nombre}
