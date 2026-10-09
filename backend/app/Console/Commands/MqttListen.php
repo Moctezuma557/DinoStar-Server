@@ -2,102 +2,52 @@
 
 namespace App\Console\Commands;
 
+use App\Services\MqttPacketProcessor;
 use Illuminate\Console\Command;
-use PhpMqtt\Client\MqttClient;
+use Illuminate\Support\Facades\Log;
 use PhpMqtt\Client\ConnectionSettings;
-use Exception;
+use PhpMqtt\Client\MqttClient;
+use Throwable;
 
 class MqttListen extends Command
 {
-    /**
-     * El nombre y la firma del comando en Artisan.
-     *
-     * @var string
-     */
     protected $signature = 'mqtt:listen';
 
-    /**
-     * Descripción del comando.
-     *
-     * @var string
-     */
-    protected $description = 'Escucha el broker MQTT local y procesa el paquete múltiple de pacientes';
+    protected $description = 'Recibe los lotes de Braquio y guarda lecturas y alertas con DataPacketService';
 
-    /**
-     * Ejecución del comando.
-     */
-    public function handle(): int
+    public function handle(MqttPacketProcessor $processor): int
     {
-        $server   = env('MQTT_HOST', 'broker'); 
-        $port     = (int) env('MQTT_PORT', 1883);
-        $clientId = 'laravel_patient_listener_' . uniqid();
-        $topic = env('MQTT_TOPIC', 'hospital/braquio/telemetria');
+        $server = config('mqtt.host');
+        $port = config('mqtt.port');
+        $topic = config('mqtt.topic');
+        $mqtt = new MqttClient($server, $port, 'laravel_patient_listener_'.uniqid());
 
         $this->info("Conectando al broker MQTT en {$server}:{$port}...");
 
         try {
-            $connectionSettings = (new ConnectionSettings)
-                ->setKeepAliveInterval(60)
-                ->setConnectTimeout(10);
-
-            $mqtt = new MqttClient($server, $port, $clientId);
-            $mqtt->connect($connectionSettings, true);
-
-            $this->info("Conectado exitosamente. Suscribiéndose al topic: {$topic}");
-
-            // Suscripción al tópico objetivo
-            $mqtt->subscribe($topic, function (string $topic, string $message) {
-                $this->info("\n--- Mega-paquete recibido [" . date('Y-m-d H:i:s') . "] ---");
-
-                // 1. Decodificar el JSON a un arreglo asociativo de PHP
-                $data = json_decode($message, true);
-
-                if (json_last_error() !== JSON_ERROR_NONE) {
-                    $this->error("Error al decodificar el payload JSON: " . json_last_error_msg());
-                    return;
-                }
-
-                if (!is_array($data)) {
-                    $this->warn("El payload recibido no es un arreglo válido.");
-                    return;
-                }
-
-                // 2. Ciclo foreach para recorrer el arreglo de pacientes
-                $totalPacientes = count($data);
-                $this->line("Procesando <comment>{$totalPacientes}</comment> registros de pacientes:");
-
-                foreach ($data as $index => $paciente) {
-                    // 3. Procesar / Imprimir cada registro por separado
-                    $this->procesarPaciente($paciente, $index + 1);
-                }
-
-                $this->info("--- Fin del procesamiento del paquete ---\n");
+            $settings = (new ConnectionSettings)->setKeepAliveInterval(60)->setConnectTimeout(10);
+            $mqtt->connect($settings, true);
+            $mqtt->subscribe($topic, function (string $topic, string $message) use ($processor): void {
+                $processor->procesar($topic, $message);
             }, 0);
 
-            // Bucle principal de escucha continua
-            $mqtt->loop(true);
-
-        } catch (Exception $e) {
-            $this->error("Excepción en MQTT Listener: " . $e->getMessage());
-            return Command::FAILURE;
-        }
-
-        return Command::SUCCESS;
-    }
-
-    /**
-     * Imprime la información individual de cada paciente.
-     */
-    private function procesarPaciente(array $paciente, int $numero): void
-    {
-        $this->line("----------------------------------------");
-        $this->line("<fg=cyan>Paciente #{$numero}</fg=cyan>");
-
-        foreach ($paciente as $key => $value) {
-            if (is_array($value)) {
-                $value = json_encode($value);
+            if (function_exists('pcntl_signal')) {
+                $this->trap([SIGTERM, SIGINT], fn () => $mqtt->interrupt());
             }
-            $this->line("  <fg=yellow>{$key}:</fg=yellow> {$value}");
+
+            $this->info("Escuchando {$topic}. Presiona Ctrl+C para terminar.");
+            $mqtt->loop(true);
+        } catch (Throwable $exception) {
+            Log::error('[MqttListen] Falló la conexión o la escucha MQTT.', ['exception' => $exception]);
+            $this->error('Error MQTT: '.$exception->getMessage());
+
+            return self::FAILURE;
+        } finally {
+            if ($mqtt->isConnected()) {
+                $mqtt->disconnect();
+            }
         }
+
+        return self::SUCCESS;
     }
 }

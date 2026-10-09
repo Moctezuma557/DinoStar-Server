@@ -2,6 +2,7 @@ import argparse
 import json
 import time
 import random
+import threading
 import paho.mqtt.client as mqtt
 from datetime import datetime
 
@@ -19,13 +20,14 @@ FACTOR_GOTEO = {
 }
 
 class DispositivoREX:
-    def __init__(self, paciente_id):
+    def __init__(self, paciente_id, modo=None, volumen=None):
         self.pacienteId = paciente_id
-        self.volRestante = random.choice(VOLUMENES_INICIALES)
-        self.modo = random.choice(MODOS_GOTEO)
+        self.volRestante = volumen if volumen is not None else random.choice(VOLUMENES_INICIALES)
+        self.modo = modo if modo is not None else random.choice(MODOS_GOTEO)
+        self.modo_fijo = modo
         self.ultima_actualizacion = time.time()
 
-    def generar_lectura(self):
+    def generar_lectura(self, escenario="aleatorio"):
         hora = time.time()
         delta_tiempo_min = (hora - self.ultima_actualizacion) / 60.0
         self.ultima_actualizacion = hora
@@ -33,9 +35,14 @@ class DispositivoREX:
         # 15% de probabilidad de generar una anomalía médica
         es_anomalia = random.random() < 0.15
         
-        if es_anomalia:
-            # Anomalía: Goteo muy lento (10-19) o muy rápido (61-80)
-            self.gotasPorMin = round(random.choice([random.uniform(10, 19), random.uniform(61, 80)]), 1)
+        if escenario != "aleatorio":
+            self.gotasPorMin = {
+                "normal": 32.5, "lento": 19.9, "rapido": 60.1,
+                "fin-bolsa": 32.5, "combinado": 19.9,
+            }[escenario]
+        elif es_anomalia:
+            # Umbrales de DataPacketService: lento <20, rápido >60.
+            self.gotasPorMin = round(random.choice([random.uniform(10, 19.9), random.uniform(60.1, 100)]), 1)
         else:
             # Condición normal
             self.gotasPorMin = round(random.uniform(20, 60), 1)
@@ -51,7 +58,12 @@ class DispositivoREX:
             print(f"Paciente {self.pacienteId}: Bolsa de suero vacía. Reemplazando bolsa...")
 
             self.volRestante = random.choice(VOLUMENES_INICIALES)
-            self.modo = random.choice(MODOS_GOTEO)
+            self.modo = self.modo_fijo or random.choice(MODOS_GOTEO)
+
+        if escenario in ("fin-bolsa", "combinado"):
+            self.volRestante = 45.2
+
+        ml_por_minuto = self.gotasPorMin / FACTOR_GOTEO[self.modo]
 
         # Calcular tiempo restante en minutos
         if ml_por_minuto > 0:
@@ -71,6 +83,7 @@ class DispositivoREX:
 def on_connect(client, userdata, flags, rc, properties=None):
     if rc == 0:
         print(f"Conectado exitosamente al broker MQTT.")
+        userdata.set()
     else:
         print(f"Error de conexión al broker MQTT. Código: {rc}")
 
@@ -80,49 +93,77 @@ def iniciar_simulacion():
                         help="Número de pacientes a simular (2-10). Por defecto: 8")
     parser.add_argument("-c", "--ciclo", type=int, default=5, 
                         help="Tiempo en segundos entre cada ciclo de envío. Por defecto: 5")
+    parser.add_argument("--broker", default=DEFAULT_BROKER)
+    parser.add_argument("--port", type=int, default=DEFAULT_PORT)
+    parser.add_argument("--topic", default=DEFAULT_TOPIC)
+    parser.add_argument("--ciclos", type=int, default=0,
+                        help="Número de lotes a publicar; 0 mantiene la simulación continua")
+    parser.add_argument("--demo", action="store_true",
+                        help="Usar modos y volúmenes compatibles con DemoSeeder: cama-01 NORMAL 500, cama-02 MICRO 250")
+    parser.add_argument("--escenario", default="aleatorio",
+                        choices=["aleatorio", "normal", "lento", "rapido", "fin-bolsa", "combinado"])
     args = parser.parse_args()
+    if args.ciclo <= 0 or args.ciclos < 0 or not 1 <= args.port <= 65535:
+        parser.error("--ciclo debe ser positivo, --ciclos no negativo y --port entre 1 y 65535")
+    if not args.topic or any(char in args.topic for char in "#+\0"):
+        parser.error("--topic debe ser un tópico de publicación sin comodines")
 
     # Inicializar camas / dispositivos
     dispositivos = [DispositivoREX(f"cama-{str(i+1).zfill(2)}") for i in range(args.pacientes)]
+    if args.demo:
+        dispositivos[0] = DispositivoREX("cama-01", "NORMAL_GOTEO", 500.0)
+        dispositivos[1] = DispositivoREX("cama-02", "MICRO_GOTEO", 250.0)
     
     # Configurar cliente MQTT con la API V2
-    client = None
+    conectado = threading.Event()
+    client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, userdata=conectado)
     try:
-        client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
         client.on_connect = on_connect
-        print(f"Conectando al broker {DEFAULT_BROKER}:{DEFAULT_PORT}...")
-        client.connect(DEFAULT_BROKER, DEFAULT_PORT, 60)
+        print(f"Conectando al broker {args.broker}:{args.port}...")
+        client.connect(args.broker, args.port, 60)
         client.loop_start()
+        if not conectado.wait(10):
+            raise RuntimeError("El broker no confirmó la conexión MQTT")
     except Exception as e:
-        print(f"Advertencia: No se pudo conectar al broker MQTT ({e}). Ejecutando solo en consola local.")
-        client = None
+        client.disconnect()
+        client.loop_stop()
+        parser.exit(1, f"No se pudo conectar al broker MQTT: {e}\n")
 
     print(f"Iniciando simulación Nodo Braquio con {args.pacientes} pacientes.")
     print(f"Ciclo de actualización: {args.ciclo} segundos.")
     print("-" * 50)
 
     try:
-        while True:
-            payload_braquio = [dispositivo.generar_lectura() for dispositivo in dispositivos]
+        enviados = 0
+        while args.ciclos == 0 or enviados < args.ciclos:
+            payload_braquio = [dispositivo.generar_lectura(args.escenario) for dispositivo in dispositivos]
 
             # Empaquetar el arreglo de DataPackets a JSON
             json_data = json.dumps(payload_braquio, indent=2)
             
             # Publicar en MQTT si hay conexión disponible
-            if client and client.is_connected():
-                client.publish(DEFAULT_TOPIC, json_data)
+            if not client.is_connected():
+                raise RuntimeError("Se perdió la conexión MQTT")
+            envio = client.publish(args.topic, json_data)
+            envio.wait_for_publish(timeout=10)
+            if not envio.is_published():
+                raise RuntimeError("El lote no pudo publicarse")
+            enviados += 1
             
             print(f"[{datetime.now().strftime('%H:%M:%S')}] DataPackets enviados:")
             print(json_data)
             print("-" * 50)
             
-            time.sleep(args.ciclo)
+            if args.ciclos == 0 or enviados < args.ciclos:
+                time.sleep(args.ciclo)
             
     except KeyboardInterrupt:
         print("\n Simulación detenida por el usuario.")
-        if client:
-            client.loop_stop()
-            client.disconnect()
+    except (RuntimeError, OSError) as e:
+        parser.exit(1, f"Error durante la simulación: {e}\n")
+    finally:
+        client.disconnect()
+        client.loop_stop()
 
 if __name__ == "__main__":
     iniciar_simulacion()

@@ -54,10 +54,10 @@ class DataPacketService
             if ($data['volRestante'] < 50) {
                 $alerts['FIN_BOLSA'] = 'Volumen restante crítico: '.$data['volRestante'].' mL';
             }
-            if ($data['gotasPorMin'] < 15) {
+            if ($data['gotasPorMin'] < 20) {
                 $alerts['GOTEO_LENTO'] = 'Goteo lento detectado: '.$data['gotasPorMin'].' gotas/min';
             }
-            if ($data['gotasPorMin'] > 80) {
+            if ($data['gotasPorMin'] > 60) {
                 $alerts['GOTEO_RAPIDO'] = 'Goteo rápido detectado: '.$data['gotasPorMin'].' gotas/min';
             }
             foreach ($alerts as $type => $message) {
