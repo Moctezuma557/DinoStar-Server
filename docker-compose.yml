@@ -48,6 +48,7 @@ services:
       - "8000:8000"
     volumes:
       - ./backend:/var/www/html
+      - backend_vendor:/var/www/html/vendor
     environment:
       APP_ENV: local
       APP_DEBUG: "false"
@@ -81,11 +82,11 @@ services:
         condition: service_healthy
 
     healthcheck:
-      test: ["CMD", "php", "-r", "exit(@file_get_contents('http://127.0.0.1:8000/up') === false ? 1 : 0);"]
+      test: ["CMD", "php", "-d", "default_socket_timeout=8", "-r", "exit(file_get_contents('http://127.0.0.1:8000/up') === false ? 1 : 0);"]
       interval: 10s
-      timeout: 5s
+      timeout: 10s
       retries: 5
-      start_period: 15s
+      start_period: 120s
 
     restart: unless-stopped
 
@@ -152,6 +153,7 @@ services:
     restart: unless-stopped
 
 volumes:
+  backend_vendor:
   postgres_data:
   mosquitto_data:
   mosquitto_log:

@@ -33,14 +33,34 @@ una migracion. No ejecutar este archivo sobre tablas existentes.
 
 ## Migraciones Laravel (tarea #22)
 
-Actualizar la rama y reconstruir el backend antes de ejecutar Artisan: el codigo
-PHP se copia a la imagen durante el build, no se monta desde el anfitrion.
+Actualizar la rama antes de ejecutar Artisan. El backend comparte el codigo
+local mediante un bind mount; sus dependencias `vendor` viven en el volumen
+Docker `backend_vendor` para evitar lecturas lentas a traves de Windows/macOS.
+La imagen incluye dependencias de `composer.lock` y el arranque las sincroniza.
+Reconstruir al cambiar Dockerfile/dependencias y reiniciar procesos persistentes
+como `mqtt:listen` despues de actualizar su codigo.
 
 ```text
 docker compose up -d --build --wait
 docker compose exec backend php artisan migrate --no-interaction
 docker compose exec backend php artisan migrate:status
 ```
+
+Si el backend queda `unhealthy`, revisar `docker compose logs --tail 50 backend`
+y `docker inspect --format '{{json .State.Health}}' dinostar-backend`.
+El healthcheck consulta la ruta Laravel `/up` (no solo un puerto abierto),
+con un timeout HTTP de 8 s, limite de proceso de 10 s y margen inicial de 120 s.
+Ese margen permite sincronizar Composer antes de servir HTTP; no convierte
+una respuesta fallida en saludable. Tras cambiar esta configuracion, ejecutar:
+
+```text
+docker compose up -d --build --no-deps --wait --wait-timeout 240 backend
+```
+
+Este ultimo comando requiere la base ya encendida y recrea solo el backend.
+No elimina volumenes PostgreSQL. La carpeta `backend/vendor` del anfitrion
+permanece separada: para PHP local ejecutar Composer localmente; para Docker,
+usar `docker compose exec backend composer install`. No copiar vendor entre SO.
 
 Hay una migracion por cada una de las ocho tablas de dominio. En una base vacia
 las crean; si `init.sql` ya las creo, comparan columnas, tipos, nulabilidad,
@@ -441,6 +461,68 @@ de publicar. No hay deduplicacion, reintentos persistentes, recuperacion de lote
 perdidos ni cambios de sesion desde MQTT. Ante una desconexion del broker,
 reiniciar `mqtt:listen`. La confirmacion de publicacion del simulador no confirma
 por si misma la persistencia: comprobar los logs del servicio y PostgreSQL.
+
+## Tipo de solucion de la sesion (tarea #60)
+
+La nueva migracion agrega `sesiones.tipo_solucion VARCHAR(255) NULL` y el
+modelo `Sesion` permite asignarlo mediante `$fillable`. La tarea no especifica
+longitud ni obligatoriedad: se usan 255 caracteres y NULL para conservar las
+sesiones existentes y permitir que los flujos anteriores sigan omitiendo el campo.
+No se asigna una solucion ficticia a los datos historicos ni se modifica `init.sql`.
+
+Desde la raiz, en Windows PowerShell o macOS/Linux, ejecutar por separado:
+
+```text
+docker compose up -d --build --wait database backend
+docker compose exec backend php artisan migrate --no-interaction
+docker compose exec backend php artisan migrate:status
+```
+
+En pgAdmin, sobre `dinostar_rex`, comprobar la columna y las sesiones:
+
+```sql
+SELECT column_name, data_type, character_maximum_length, is_nullable
+FROM information_schema.columns
+WHERE table_schema = 'public' AND table_name = 'sesiones'
+  AND column_name = 'tipo_solucion';
+
+SELECT id, paciente_id, tipo_solucion, estado FROM public.sesiones ORDER BY id;
+```
+
+Resultado esperado de la primera consulta: `tipo_solucion`, `character varying`,
+`255`, `YES`. Las sesiones previas mantienen sus datos y tienen NULL en el campo.
+
+Para comprobar la creacion mediante Eloquent en una base local con DemoSeeder,
+abrir Tinker (las variables XDG evitan el problema de permisos de PsySH):
+
+```text
+docker compose exec backend php artisan db:seed --no-interaction
+docker compose exec -e XDG_CONFIG_HOME=/tmp -e XDG_DATA_HOME=/tmp -e XDG_CACHE_HOME=/tmp backend php artisan tinker
+```
+
+Ejecutar estas lineas dentro de Tinker, no en PowerShell ni zsh:
+
+```php
+\Illuminate\Support\Facades\DB::beginTransaction();
+$sesion = \App\Models\Sesion::create(['paciente_id' => -35003, 'enfermera_id' => -35001, 'vol_total' => 500, 'tipo_solucion' => 'Solucion de prueba', 'modo_goteo' => 'NORMAL_GOTEO', 'estado' => 'FINALIZADA', 'inicio' => now(), 'fin' => now()]);
+$sesion->fresh()->only(['id', 'paciente_id', 'tipo_solucion', 'estado']);
+\Illuminate\Support\Facades\DB::rollBack();
+exit
+```
+
+La consulta `fresh()` debe recuperar `Solucion de prueba` desde PostgreSQL.
+Se utiliza una sesion finalizada para no ocupar una cama activa. El rollback de
+esta transaccion elimina solamente la insercion de prueba; por eso no aparecera
+despues en pgAdmin. La secuencia puede consumir un ID aunque se revierta la fila.
+
+`SesionTipoSolucionTest` verifica actualizacion con datos previos, tipo y longitud
+de columna, creacion con/sin el nuevo dato, repeticion del seeder y migrate,
+y reversion/reaplicacion de la migracion. Usa la misma base aislada y opt-in
+`DINOSTAR_MIGRATION_TEST` descritos en la seccion de pruebas PostgreSQL.
+
+El `down()` de la migracion elimina la columna y cualquier valor que contenga;
+no ejecutar rollback sobre datos que se necesiten conservar. Este cambio permite
+persistir el campo con Eloquent; formularios y endpoints quedan fuera de esta tarea.
 
 ## Prueba de integridad
 

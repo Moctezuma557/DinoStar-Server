@@ -17,10 +17,10 @@ mkdir -p bootstrap/cache \
 chmod -R 777 storage bootstrap/cache
 
 # 2. Verificar y sincronizar dependencias de Composer
-# Como el directorio ./backend esta montado como volumen, 
-# 'composer install' actualizara directamente la carpeta 'vendor' y 'composer.lock' locales.
+# El codigo se comparte con el anfitrion, pero vendor vive en un volumen Docker.
+# composer install respeta composer.lock y sincroniza ese volumen al arrancar.
 if [ -f "composer.json" ]; then
-    echo " [INFO] Verificando e instalando dependencias de Composer en la carpeta local..."
+    echo " [INFO] Sincronizando dependencias de Composer en el contenedor..."
     composer install --no-interaction --prefer-dist --optimize-autoloader
 fi
 
