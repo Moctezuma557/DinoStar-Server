@@ -1,0 +1,602 @@
+/* ============================================================
+   LocalizadorPacientes · cuadro de diálogo de la vista Pacientes
+
+   Todas las variables provienen de src/styles/globals.css.
+   Módulo CSS: Vite renombra las clases al compilar, así que no
+   chocan con las de otros componentes.
+   ============================================================ */
+
+.cuadro {
+  display: flex;
+  flex-direction: column;
+  max-width: 1060px;
+  margin: 0 auto;
+  border: 1px solid var(--color-borde);
+  border-radius: var(--radio-lg);
+  background-color: var(--color-superficie);
+  box-shadow: var(--sombra-panel);
+  overflow: hidden;
+}
+
+/* ---------- Encabezado ---------- */
+
+.encabezado {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--espacio-4);
+  padding: var(--espacio-5) var(--espacio-6);
+  border-bottom: 1px solid var(--color-borde);
+}
+
+.marca {
+  flex-shrink: 0;
+  padding-top: 2px;
+  font-size: var(--texto-lg);
+  font-weight: var(--peso-bold);
+  color: var(--color-primario);
+  letter-spacing: -0.01em;
+}
+
+.encabezadoTexto {
+  flex: 1;
+  min-width: 0;
+}
+
+.titulo {
+  font-size: var(--texto-lg);
+  font-weight: var(--peso-semibold);
+}
+
+.subtitulo {
+  margin-top: 2px;
+  max-width: 62ch;
+  font-size: var(--texto-xs);
+  color: var(--color-texto-secundario);
+}
+
+.enLinea {
+  width: 8px;
+  height: 8px;
+  margin-top: var(--espacio-2);
+  flex-shrink: 0;
+  border-radius: var(--radio-pildora);
+  background-color: var(--color-normal);
+}
+
+.cerrar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  border: none;
+  border-radius: var(--radio-md);
+  background-color: transparent;
+  color: var(--color-texto-secundario);
+  transition:
+    background-color var(--transicion-rapida),
+    color var(--transicion-rapida);
+}
+
+.cerrar:hover {
+  background-color: var(--color-superficie-alt);
+  color: var(--color-secundario);
+}
+
+/* ---------- Columnas ---------- */
+
+.columnas {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+  gap: var(--espacio-6);
+  padding: var(--espacio-5) var(--espacio-6);
+}
+
+.columna {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-3);
+  min-width: 0;
+}
+
+.seccionEncabezado {
+  display: flex;
+  align-items: center;
+  gap: var(--espacio-3);
+}
+
+.seccionIcono {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  border-radius: var(--radio-md);
+  background-color: var(--color-primario-suave);
+  color: var(--color-secundario);
+}
+
+.seccionTitulo {
+  font-size: var(--texto-md);
+  font-weight: var(--peso-semibold);
+}
+
+.seccionNota {
+  font-size: var(--texto-xs);
+  color: var(--color-texto-secundario);
+}
+
+.chipTurno {
+  margin-left: auto;
+  padding: var(--espacio-1) var(--espacio-3);
+  border-radius: var(--radio-md);
+  background-color: var(--color-superficie-alt);
+  color: var(--color-texto-secundario);
+  font-size: var(--texto-xs);
+  font-weight: var(--peso-medio);
+  text-align: center;
+  white-space: nowrap;
+}
+
+.rotulo {
+  font-size: var(--texto-xs);
+  font-weight: var(--peso-semibold);
+  color: var(--color-texto-secundario);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* ---------- Buscadores ---------- */
+
+.buscador {
+  display: flex;
+  align-items: center;
+  gap: var(--espacio-2);
+  padding: var(--espacio-2) var(--espacio-3);
+  border: 1px solid var(--color-borde);
+  border-radius: var(--radio-md);
+  background-color: var(--color-superficie);
+  color: var(--color-texto-secundario);
+}
+
+.buscador:focus-within {
+  border-color: var(--color-primario);
+  box-shadow: var(--sombra-foco);
+}
+
+.buscadorCampo {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  font-size: var(--texto-sm);
+  color: var(--color-texto);
+}
+
+.buscadorCampo:focus {
+  outline: none;
+}
+
+.buscadorCampo::placeholder {
+  color: var(--color-texto-secundario);
+}
+
+.contador {
+  font-size: var(--texto-xs);
+  color: var(--color-texto-secundario);
+}
+
+.vacio {
+  padding: var(--espacio-4);
+  border: 1px dashed var(--color-borde-fuerte);
+  border-radius: var(--radio-md);
+  font-size: var(--texto-sm);
+  color: var(--color-texto-secundario);
+  text-align: center;
+}
+
+/* ---------- Rejilla de enfermeras ---------- */
+
+.rejillaEnfermeras {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--espacio-2);
+}
+
+.enfermera {
+  display: flex;
+  align-items: center;
+  gap: var(--espacio-3);
+  width: 100%;
+  padding: var(--espacio-3);
+  border: 1px solid var(--color-borde);
+  border-radius: var(--radio-md);
+  background-color: var(--color-superficie);
+  text-align: left;
+  transition:
+    border-color var(--transicion-rapida),
+    background-color var(--transicion-rapida);
+}
+
+.enfermera:hover {
+  border-color: var(--color-borde-fuerte);
+  background-color: var(--color-superficie-alt);
+}
+
+.enfermeraActiva,
+.enfermeraActiva:hover {
+  border-color: var(--color-primario);
+  background-color: var(--color-primario-suave);
+}
+
+.avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: var(--radio-pildora);
+  color: var(--color-texto-inverso);
+  font-size: 11px;
+  font-weight: var(--peso-bold);
+}
+
+/* Color estable por posición en la lista: la enfermera conserva
+   siempre el mismo avatar sin necesidad de guardarlo como dato. */
+.avatar[data-color="0"] {
+  background-color: #2563eb;
+}
+.avatar[data-color="1"] {
+  background-color: #0f766e;
+}
+.avatar[data-color="2"] {
+  background-color: #047857;
+}
+.avatar[data-color="3"] {
+  background-color: #7c3aed;
+}
+.avatar[data-color="4"] {
+  background-color: #be123c;
+}
+.avatar[data-color="5"] {
+  background-color: #b45309;
+}
+
+.enfermeraTexto {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: var(--interlineado-corto);
+}
+
+.enfermeraNombre {
+  font-size: var(--texto-sm);
+  font-weight: var(--peso-semibold);
+  color: var(--color-secundario);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.enfermeraCarga {
+  font-size: 11px;
+  color: var(--color-texto-secundario);
+}
+
+/* ---------- Pacientes asignados ---------- */
+
+.asignadosEncabezado {
+  display: flex;
+  align-items: center;
+  gap: var(--espacio-3);
+  margin-top: var(--espacio-2);
+}
+
+.asignadosTitulo {
+  display: flex;
+  align-items: center;
+  gap: var(--espacio-2);
+  flex: 1;
+  min-width: 0;
+  font-size: var(--texto-xs);
+  font-weight: var(--peso-semibold);
+  color: var(--color-secundario);
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.chipGuardia {
+  padding: var(--espacio-1) var(--espacio-3);
+  border-radius: var(--radio-pildora);
+  background-color: var(--color-normal-suave);
+  color: #047857;
+  font-size: 11px;
+  font-weight: var(--peso-semibold);
+  white-space: nowrap;
+}
+
+/* ---------- Lista y tarjetas de cama ---------- */
+
+.lista {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-3);
+
+  /* Sin un tope, las 19 camas estiran la columna y empujan el pie
+     fuera de la vista. Acotar cada lista y dejar que scrollee por
+     dentro mantiene el cuadro como una unidad, igual que en la
+     referencia de diseño. */
+  max-height: 300px;
+  overflow-y: auto;
+
+  /* Espacio para que la barra de desplazamiento no se encime sobre
+     el borde de las tarjetas. */
+  padding-right: var(--espacio-1);
+}
+
+.cama {
+  padding: var(--espacio-4);
+  border: 1px solid var(--color-borde);
+  border-left: 3px solid var(--color-borde-fuerte);
+  border-radius: var(--radio-md);
+  background-color: var(--color-superficie);
+
+  /* Dentro de un contenedor flex en columna, los hijos se encogen
+     para caber. Sin esto las tarjetas se aplastan al activarse el
+     scroll de la lista. */
+  flex-shrink: 0;
+}
+
+/* El borde izquierdo repite por color el estado que el badge ya
+   nombra en texto: el color refuerza, no comunica por sí solo. */
+.cama--normal {
+  border-left-color: var(--color-normal);
+}
+
+.cama--atencion {
+  border-left-color: var(--color-atencion);
+  background-color: var(--color-atencion-suave);
+}
+
+.cama--alerta {
+  border-left-color: var(--color-alerta);
+  background-color: var(--color-alerta-suave);
+}
+
+.camaSeleccionada {
+  border-color: var(--color-primario);
+  box-shadow: var(--sombra-foco);
+}
+
+.camaEncabezado {
+  display: flex;
+  align-items: center;
+  gap: var(--espacio-3);
+  margin-bottom: var(--espacio-3);
+}
+
+.camaEtiqueta {
+  padding: 2px var(--espacio-2);
+  border-radius: var(--radio-sm);
+  background-color: var(--color-primario-suave);
+  color: var(--color-secundario);
+  font-size: 11px;
+  font-weight: var(--peso-bold);
+  white-space: nowrap;
+}
+
+.camaAcciones {
+  display: flex;
+  align-items: center;
+  gap: var(--espacio-2);
+  margin-left: auto;
+}
+
+.badgeEstado {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--espacio-1);
+  padding: 2px var(--espacio-2);
+  border-radius: var(--radio-pildora);
+  background-color: var(--color-normal-suave);
+  color: #047857;
+  font-size: 11px;
+  font-weight: var(--peso-semibold);
+  white-space: nowrap;
+}
+
+.puntoEstado {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radio-pildora);
+  background-color: var(--color-normal);
+}
+
+.avisoEstado {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--espacio-1);
+  padding: 2px var(--espacio-2);
+  border: 1px solid var(--color-atencion);
+  border-radius: var(--radio-pildora);
+  color: #92400e;
+  font-size: 11px;
+  font-weight: var(--peso-semibold);
+  white-space: nowrap;
+}
+
+.botonSeleccionar {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--espacio-1);
+  padding: var(--espacio-1) var(--espacio-3);
+  border: 1px solid var(--color-borde-fuerte);
+  border-radius: var(--radio-sm);
+  background-color: var(--color-superficie);
+  color: var(--color-texto);
+  font-size: var(--texto-xs);
+  font-weight: var(--peso-semibold);
+  white-space: nowrap;
+  transition:
+    background-color var(--transicion-rapida),
+    border-color var(--transicion-rapida),
+    color var(--transicion-rapida);
+}
+
+.botonSeleccionar:hover {
+  border-color: var(--color-primario);
+  color: var(--color-secundario);
+}
+
+.botonSeleccionado,
+.botonSeleccionado:hover {
+  border-color: var(--color-primario);
+  background-color: var(--color-primario);
+  color: var(--color-texto-inverso);
+}
+
+.camaPaciente {
+  font-size: var(--texto-md);
+  font-weight: var(--peso-semibold);
+}
+
+.camaSolucion {
+  margin-top: 2px;
+  font-size: var(--texto-xs);
+  color: var(--color-texto-secundario);
+}
+
+.camaMetricas {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--espacio-3);
+  margin-top: var(--espacio-3);
+  font-size: 11px;
+  color: var(--color-texto-secundario);
+}
+
+.camaMetricas strong {
+  color: var(--color-secundario);
+  font-variant-numeric: tabular-nums;
+}
+
+.camaRestante {
+  font-weight: var(--peso-semibold);
+  color: var(--color-secundario);
+  white-space: nowrap;
+}
+
+.barra {
+  height: 6px;
+  margin-top: var(--espacio-2);
+  border-radius: var(--radio-pildora);
+  background-color: var(--color-superficie-alt);
+  overflow: hidden;
+}
+
+.barraRelleno {
+  display: block;
+  height: 100%;
+  border-radius: var(--radio-pildora);
+  background-color: var(--color-primario);
+}
+
+.cama--atencion .barraRelleno {
+  background-color: var(--color-atencion);
+}
+
+.cama--alerta .barraRelleno {
+  background-color: var(--color-alerta);
+}
+
+/* ---------- Nota de sensores ---------- */
+
+.notaSensores {
+  display: flex;
+  align-items: center;
+  gap: var(--espacio-3);
+  margin-top: auto;
+  padding: var(--espacio-4);
+  border-radius: var(--radio-md);
+  background-color: var(--color-superficie-alt);
+  color: var(--color-texto-secundario);
+  font-size: var(--texto-xs);
+}
+
+.notaSensores strong {
+  color: var(--color-primario);
+}
+
+/* ---------- Pie ---------- */
+
+.pie {
+  display: flex;
+  align-items: center;
+  gap: var(--espacio-4);
+  padding: var(--espacio-4) var(--espacio-6);
+  border-top: 1px solid var(--color-borde);
+  background-color: var(--color-superficie-alt);
+}
+
+.pieSeleccion {
+  display: flex;
+  align-items: center;
+  gap: var(--espacio-2);
+  flex: 1;
+  min-width: 0;
+  font-size: var(--texto-xs);
+  color: var(--color-texto-secundario);
+}
+
+.pieSeleccion strong {
+  color: var(--color-secundario);
+}
+
+.pieAcciones {
+  display: flex;
+  align-items: center;
+  gap: var(--espacio-3);
+}
+
+.botonCancelar {
+  padding: var(--espacio-2) var(--espacio-5);
+  border: 1px solid var(--color-borde-fuerte);
+  border-radius: var(--radio-md);
+  background-color: var(--color-superficie);
+  color: var(--color-texto);
+  font-size: var(--texto-sm);
+  font-weight: var(--peso-medio);
+  transition:
+    background-color var(--transicion-rapida),
+    border-color var(--transicion-rapida);
+}
+
+.botonCancelar:hover {
+  border-color: var(--color-borde-fuerte);
+  background-color: var(--color-superficie-alt);
+}
+
+.botonConfirmar {
+  padding: var(--espacio-2) var(--espacio-5);
+  border: none;
+  border-radius: var(--radio-md);
+  background-color: var(--color-secundario);
+  color: var(--color-texto-inverso);
+  font-size: var(--texto-sm);
+  font-weight: var(--peso-semibold);
+  white-space: nowrap;
+  transition: background-color var(--transicion-rapida);
+}
+
+.botonConfirmar:hover:not(:disabled) {
+  background-color: #14294a;
+}
+
+.botonConfirmar:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
