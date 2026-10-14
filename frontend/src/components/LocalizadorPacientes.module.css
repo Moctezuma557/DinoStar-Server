@@ -18,6 +18,13 @@
   overflow: hidden;
 }
 
+.marca {
+  width: 112px;
+  height: auto;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
 /* ---------- Encabezado ---------- */
 
 .encabezado {
@@ -26,15 +33,6 @@
   gap: var(--espacio-4);
   padding: var(--espacio-5) var(--espacio-6);
   border-bottom: 1px solid var(--color-borde);
-}
-
-.marca {
-  flex-shrink: 0;
-  padding-top: 2px;
-  font-size: var(--texto-lg);
-  font-weight: var(--peso-bold);
-  color: var(--color-primario);
-  letter-spacing: -0.01em;
 }
 
 .encabezadoTexto {

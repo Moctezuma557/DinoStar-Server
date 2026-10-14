@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Icono from "./Icono";
 import styles from "./LocalizadorPacientes.module.css";
+import logoDinoStar from "../assets/Logo.png";
 
 const ENFERMERAS = [
   { id: "sarah", nombre: "Lic. Sarah J.", iniciales: "SJ" },
@@ -409,7 +410,7 @@ export default function LocalizadorPacientes({ onCerrar, onConfirmar }) {
       aria-labelledby="titulo-localizador"
     >
       <header className={styles.encabezado}>
-        <span className={styles.marca}>DinoStar</span>
+        <img src={logoDinoStar} alt="DinoStar" className={styles.marca} />
 
         <div className={styles.encabezadoTexto}>
           <h2 id="titulo-localizador" className={styles.titulo}>
