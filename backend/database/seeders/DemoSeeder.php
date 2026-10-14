@@ -39,16 +39,20 @@ class DemoSeeder extends Seeder
                 ], ['activo' => true, 'created_at' => $now, 'updated_at' => $now]);
             }
 
-            foreach ([1 => ['NORMAL_GOTEO', 500, 20], 2 => ['MICRO_GOTEO', 250, 60]] as $number => [$mode, $volume, $dropFactor]) {
+            foreach ([1 => ['MICRO_GOTEO', 500], 2 => ['NORMAL_GOTEO', 250]] as $number => [$mode, $volume]) {
                 $sessionId = -35000 - $number;
                 $this->insertDemo('sesiones', $sessionId, [
                     'paciente_id' => $sessionId, 'enfermera_id' => -35001,
-                    'modo_goteo' => $mode,
                 ], [
+                    'modo_goteo' => $mode,
                     'vol_total' => $volume, 'estado' => 'ACTIVA', 'inicio' => $now,
                     'fin' => null, 'created_at' => $now, 'updated_at' => $now,
                 ]);
                 $session = DB::table('sesiones')->where('id', $sessionId)->first();
+                if ($session->modo_goteo !== $mode) {
+                    $this->command?->warn('La sesión demo '.$sessionId.' conserva su modo anterior. Revisar demo:configurar-mqtt --dry-run.');
+                }
+                $dropFactor = $session->modo_goteo === 'MICRO_GOTEO' ? 60 : 20;
                 for ($index = 0; $index < 5; $index++) {
                     $drops = 20 + $index * 10;
                     $remaining = round((float) $session->vol_total * (1 - $index * 0.05), 2);

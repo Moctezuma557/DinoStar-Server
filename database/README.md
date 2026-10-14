@@ -145,7 +145,8 @@ docker compose exec backend php artisan db:seed --no-interaction
 `db:seed` llama a `DemoSeeder` y crea una enfermera (`enfermera@dinostar.com`,
 password `password` almacenado con bcrypt), turno MATUTINO, activa; diez pacientes
 Paciente 01..10 en Sala A, camas cama-01..cama-10; dos sesiones ACTIVA para los
-primeros dos pacientes, NORMAL_GOTEO de 500 ml y MICRO_GOTEO de 250 ml; cinco
+primeros dos pacientes: cama-01 MICRO_GOTEO de 500 ml y cama-02 NORMAL_GOTEO
+de 250 ml; cinco
 lecturas por sesion (diez en total), entre 20 y 60 gotas/minuto y volumen decreciente.
 
 Para estos ejemplos se asumen factores de 20 gotas/ml en NORMAL y 60 en MICRO.
@@ -160,7 +161,9 @@ Los datos persisten al recrear contenedores mientras se conserve el volumen.
 
 Se reservan IDs negativos -35001..-35010 por tabla para identificar los registros
 demo sin afectar las secuencias de IDs positivos. Una segunda ejecucion conserva
-los registros existentes, incluidos passwords, estados y lecturas modificados.
+los registros existentes, incluidos passwords, modos, estados y lecturas modificados.
+Si una sesion conserva el modo anterior, muestra un aviso; revisar el comando
+`demo:configurar-mqtt --dry-run` descrito en la seccion MQTT.
 No reactiva sesiones finalizadas ni reinicia las pruebas. Si se borraron registros
 demo, inserta los faltantes si no hay conflictos. Si un ID pertenece a otro
 registro, el correo ya esta ocupado o una cama/sesion activa colisiona, se detiene
@@ -225,11 +228,15 @@ docker compose exec backend php artisan db:seed --no-interaction
 docker compose exec -e XDG_CONFIG_HOME=/tmp -e XDG_DATA_HOME=/tmp -e XDG_CACHE_HOME=/tmp backend php artisan tinker
 ```
 
+Si se conserva la demo anterior con cama-01 NORMAL, revisar y aplicar primero
+`demo:configurar-mqtt` como se indica en la seccion MQTT. El ejemplo siguiente
+requiere cama-01 MICRO y no cambia automaticamente el modo de la sesion.
+
 Dentro de Tinker, ejecutar estas lineas PHP (no en PowerShell/Bash):
 
 ```php
 $service = app(\App\Services\DataPacketService::class);
-$packet = ['pacienteId' => 'cama-01', 'gotasPorMin' => 32.5, 'tiempoRestante' => 245, 'volRestante' => 408.5, 'modo' => 'NORMAL_GOTEO', 'timestamp' => now()->getTimestampMs()];
+$packet = ['pacienteId' => 'cama-01', 'gotasPorMin' => 32.5, 'tiempoRestante' => 754, 'volRestante' => 408.5, 'modo' => 'MICRO_GOTEO', 'timestamp' => now()->getTimestampMs()];
 $before = [\App\Models\Lectura::count(), \App\Models\Alerta::count()];
 $service->procesar($packet);
 [\App\Models\Lectura::count() - $before[0], \App\Models\Alerta::count() - $before[1]];
@@ -284,7 +291,7 @@ Ejecutar junto con DomainMigrationsTest y DemoSeederTest para comprobar regresio
 ## Integracion del simulador con MQTT y DataPacketService (tarea #51)
 
 Flujo: `simulator/braquio_simulator.py` -> broker Mosquitto -> `mqtt:listen`
--> `MqttPacketProcessor` -> `DataPacketService` -> PostgreSQL.
+-> `DataPacketService` -> PostgreSQL.
 Se utiliza el generador de la tarea #36, no una llamada manual desde Tinker.
 El listener recibe una lista JSON y pasa cada objeto al servicio existente.
 Un JSON incorrecto se descarta con warning. Un elemento invalido o un error
@@ -297,7 +304,164 @@ MQTT_PORT y MQTT_TOPIC (por defecto `broker`, `1883` y
 `localhost:1883`. Los parametros `--broker`, `--port` y `--topic` permiten
 cambiar su destino. Si se cambia el topic, debe coincidir en ambos extremos.
 
-### Preparacion en una base local de desarrollo
+### Recepcion con activacion desde el simulador (correccion actual)
+
+El listener entrega el JSON directamente a `DataPacketService::procesarMensaje`.
+`MqttPacketProcessor` queda como adaptador de compatibilidad para llamadas previas;
+el listener ya no lo usa. Mosquitto sigue transportando los mensajes MQTT.
+No hace falta ejecutar `db:seed` ni `demo:configurar-mqtt` en este flujo.
+
+Con `--simulador`, cada paquete valido puede crear una sesion ACTIVA para su cama
+registrada. Cuatro camas recibidas pueden generar cuatro sesiones activas, sin
+limite de dos. Un nuevo envio con el mismo modo reutiliza la sesion; si cambia
+el modo, finaliza la sesion anterior y crea otra para conservar el modo de las
+lecturas historicas. La lectura y sus alertas se guardan en la misma transaccion
+que la activacion: un fallo revierte todos los cambios de ese paquete.
+
+Condiciones del flujo:
+
+- Solo APP_ENV local/testing; es una opcion explicita para simulaciones.
+- Los pacientes deben estar registrados, activos y tener numero_cama unico entre
+  los pacientes vigentes. No se inventan identidades a partir de un numero de cama.
+- La enfermera y el volumen inicial se indican al arrancar: el JSON no los envia.
+  El volumen inicial es un parametro de la prueba, no una medicion del dispositivo.
+  Para bolsas de distintos tamanos, configurar las sesiones con sus volumenes
+  reales antes de iniciar; el parametro es comun a las sesiones nuevas.
+- Una sesion PAUSADA no se reactiva automaticamente. Las camas ausentes de un
+  lote no se activan ni se cierran por su ausencia; una omision puede ser temporal.
+- Solo se activan camas que enviaron paquetes validos; los registros previos
+  de otras camas no se eliminan. `pacientes.activo` no es `sesiones.estado`.
+- El modo recibido es la fuente del modo de la nueva sesion. El simulador actual
+  sin `--demo` elige modos aleatorios. Este cambio no modifica `simulator/` ni fuerza
+  cama-01 MICRO/cama-02 NORMAL si el emisor envia otros modos.
+- Sin `--simulador`, `mqtt:listen` conserva el comportamiento de #44: exige una
+  sesion ACTIVA y modo coincidente; si no existe, registra warning y no inserta.
+
+Usar la misma revision del backend en todos los equipos y detener el listener
+anterior con Ctrl+C antes de iniciar el nuevo. Ejecutar desde la raiz:
+
+```text
+git branch --show-current
+git log -1 --oneline
+docker compose up -d --build --wait database broker backend
+docker compose exec backend php artisan migrate --no-interaction
+docker compose exec backend php artisan mqtt:listen --help
+```
+
+En pgAdmin, consultar la enfermera a asignar y las camas registradas:
+
+```sql
+SELECT id, nombre FROM usuarios WHERE rol = 'ENFERMERA' AND activo = true;
+SELECT numero_cama, sala, activo FROM pacientes ORDER BY numero_cama;
+SELECT count(*) AS lecturas FROM lecturas;
+SELECT count(*) AS alertas FROM alertas;
+```
+
+En la primera terminal, cambiar -35001 por el ID obtenido si difiere. El siguiente
+ejemplo usa volumen inicial de prueba de 500 mL para nuevas sesiones:
+
+```text
+docker compose exec backend php artisan mqtt:listen --simulador --enfermera=-35001 --volumen-inicial=500
+```
+
+Esperar `Escuchando hospital/braquio/telemetria`. Mantener un solo listener para
+no duplicar registros. En la segunda terminal, Windows PowerShell, ejecutar cada
+instruccion por separado. Si ya existe un entorno funcional, omitir su creacion.
+En equipos con el lanzador oficial de Python, crear el entorno con:
+
+```powershell
+py -3 -m venv simulator/.venv
+```
+
+En esta laptop se preparo CPython oficial 3.13.16 en la distribucion NuGet,
+porque la politica de Windows bloqueo el modulo `array` del Python de MSYS2.
+El entorno ya quedo creado en `simulator/.venv/Scripts/python.exe`. Para
+recrearlo en esta laptop, solo si falta, usar el interprete base explicitamente:
+
+```powershell
+& "$env:LOCALAPPDATA\Programs\Python\DinoStar313\tools\python.exe" -m venv simulator/.venv
+```
+
+No usar `python -m venv` sin comprobar antes `Get-Command python`: puede
+seleccionar otra vez `C:\msys64\mingw64\bin\python.exe`. El respaldo del entorno
+anterior se conservo en `simulator/venv/msys2-backup-20261013_215218`, excluido de
+Git. No se cambiaron las politicas de Windows ni el PATH. La distribucion base
+es local y no viaja por Git: cada equipo prepara su propio entorno virtual.
+
+Comprobar el entorno nuevo y despues ejecutar los escenarios:
+
+```powershell
+& ./simulator/.venv/Scripts/python.exe -c "import array; print('array OK')"
+& ./simulator/.venv/Scripts/python.exe -m pip --version
+$pythonSim = if (Test-Path simulator/.venv/Scripts/python.exe) {
+    './simulator/.venv/Scripts/python.exe'
+} else {
+    './simulator/.venv/bin/python.exe'
+}
+& $pythonSim -m pip install -r simulator/requirements.txt
+& $pythonSim simulator/braquio_simulator.py --pacientes 4 --escenario normal --ciclo 1 --ciclos 3
+& $pythonSim simulator/braquio_simulator.py --pacientes 4 --escenario combinado --ciclos 1
+& $pythonSim simulator/braquio_simulator.py --pacientes 4 --escenario rapido --ciclos 1
+```
+
+En macOS/Linux, en esa segunda terminal (crear el entorno solo si no existe):
+
+```bash
+python3 -m venv simulator/.venv
+simulator/.venv/bin/python -m pip install -r simulator/requirements.txt
+simulator/.venv/bin/python simulator/braquio_simulator.py --pacientes 4 --escenario normal --ciclo 1 --ciclos 3
+simulator/.venv/bin/python simulator/braquio_simulator.py --pacientes 4 --escenario combinado --ciclos 1
+simulator/.venv/bin/python simulator/braquio_simulator.py --pacientes 4 --escenario rapido --ciclos 1
+```
+
+Sin otros publicadores y con las cuatro camas disponibles, los incrementos son:
+
+| Prueba | Lecturas nuevas | Alertas nuevas |
+|---|---:|---:|
+| Normal, tres lotes | 12 | 0 |
+| Combinado, un lote | 4 | 8 (4 FIN_BOLSA + 4 GOTEO_LENTO) |
+| Rapido, un lote | 4 | 4 GOTEO_RAPIDO |
+| Total de estos comandos | 20 | 12 |
+
+Comparar incrementos, no IDs: puede haber historial previo. Los cambios de modo
+pueden agregar sesiones FINALIZADA; debe seguir habiendo una ACTIVA por cama.
+En pgAdmin comprobar, sin filtrar por los IDs negativos del seeder:
+
+```sql
+SELECT (SELECT count(*) FROM lecturas) AS lecturas,
+       (SELECT count(*) FROM alertas) AS alertas;
+
+SELECT p.numero_cama, s.id AS sesion_id, s.estado, s.modo_goteo
+FROM sesiones s JOIN pacientes p ON p.id = s.paciente_id
+WHERE s.estado = 'ACTIVA' ORDER BY p.numero_cama;
+
+SELECT l.id, p.numero_cama, s.modo_goteo, l.gotas_por_min, l.vol_restante,
+       l.tiempo_restante_min, l.timestamp_dispositivo
+FROM lecturas l JOIN sesiones s ON s.id = l.sesion_id
+JOIN pacientes p ON p.id = s.paciente_id
+ORDER BY l.id DESC LIMIT 20;
+
+SELECT a.id, p.numero_cama, a.tipo, a.mensaje, a.resuelta
+FROM alertas a JOIN sesiones s ON s.id = a.sesion_id
+JOIN pacientes p ON p.id = s.paciente_id
+ORDER BY a.id DESC LIMIT 12;
+```
+
+Validacion de esta correccion: 36 pruebas PHP / 445 aserciones, sin omisiones,
+incluyendo cuatro y diez camas sin seeder, limites 20/60, aislamiento de errores,
+rollback completo, modos historicos y comportamiento previo. Con el archivo
+original del simulador sin modificaciones, Mosquitto y PostgreSQL 15 aislados:
+seis lotes de cuatro camas guardaron 24 lecturas y 12 alertas; cuatro sesiones
+quedaron ACTIVA y cama-05..10 no se activaron. Se compararon campos y timestamps
+con los JSON enviados. Un JSON invalido no impidio recibir el siguiente lote.
+La base principal no se utilizo en estas pruebas. Esta revision se ejecuto en
+Windows con backend Linux en Docker; repetir en macOS y en la revision compartida
+antes de afirmar que todos los equipos estan verificados.
+
+### Flujo anterior: sesiones preconfiguradas mediante demo
+
+La seccion siguiente describe la alternativa sin `--simulador`, limitada a las
+sesiones previamente activas. No es un requisito del flujo actual de activacion.
 
 Desde la raiz del repositorio:
 
@@ -307,10 +471,36 @@ docker compose exec backend php artisan migrate --no-interaction
 docker compose exec backend php artisan db:seed --no-interaction
 ```
 
-El seeder conserva las sesiones existentes. Comprobar que cama-01 tenga una
-sesion ACTIVA NORMAL_GOTEO y cama-02 una ACTIVA MICRO_GOTEO. Cama-03 debe estar
-sin sesion activa para la prueba de descarte. No se borran volumenes ni se
-ejecuta `migrate:fresh`.
+El contrato de demo acordado el 13/10/2026 es cama-01 con sesion ACTIVA
+MICRO_GOTEO y cama-02 con sesion ACTIVA NORMAL_GOTEO; las demas camas no tienen
+sesion activa. `pacientes.activo` identifica un paciente vigente y no sustituye
+a `sesiones.estado`: puede haber diez pacientes y solo dos sesiones ACTIVA.
+
+El seeder conserva las sesiones existentes. En una base con la demo anterior,
+hacer respaldo y consultar primero la correccion propuesta:
+
+```text
+docker compose exec backend php artisan demo:configurar-mqtt --dry-run
+docker compose exec backend php artisan demo:configurar-mqtt
+```
+
+El primer comando no escribe datos. El segundo cambia solo modo_goteo y
+updated_at de las sesiones demo -35001/-35002 cuando el modo difiere; conserva
+volumenes, lecturas y alertas anteriores, sin recalcular tiempos historicos.
+Solo funciona en PostgreSQL local/testing. Si faltan registros, no coinciden
+las camas, una sesion no esta ACTIVA o existen otras sesiones activas, se detiene
+sin cambios. No reactiva ni cierra sesiones automaticamente. No se borran
+volumenes ni se ejecuta `migrate:fresh`.
+
+Comprobar en pgAdmin:
+
+```sql
+SELECT p.numero_cama, p.activo AS paciente_activo, s.id AS sesion_id,
+       s.estado, s.modo_goteo
+FROM pacientes p LEFT JOIN sesiones s ON s.paciente_id = p.id AND s.estado = 'ACTIVA'
+WHERE p.numero_cama IN ('cama-01', 'cama-02', 'cama-03', 'cama-04')
+ORDER BY p.numero_cama;
+```
 
 En una terminal que se mantiene abierta, iniciar UN receptor:
 
@@ -324,10 +514,12 @@ terminal porque Compose configura LOG_CHANNEL=stderr. Detener con Ctrl+C.
 Evitar varios receptores del mismo topic: cada uno recibiria el lote y
 guardaria otra copia de las lecturas.
 
-En otra terminal, preparar Python 3 y el entorno del simulador (una sola vez):
+En otra terminal, preparar Python 3 y el entorno del simulador solo si no existe.
+En Windows usar el lanzador oficial (o la ruta de CPython oficial indicada arriba).
+En macOS/Linux usar python3:
 
 ```text
-python -m venv simulator/.venv
+py -3 -m venv simulator/.venv
 ```
 
 Windows PowerShell, incluyendo Python de MSYS2:
@@ -339,14 +531,14 @@ $pythonSim = if (Test-Path simulator/.venv/Scripts/python.exe) {
     './simulator/.venv/bin/python.exe'
 }
 & $pythonSim -m pip install -r simulator/requirements.txt
-& $pythonSim simulator/braquio_simulator.py --demo --pacientes 3 --escenario normal --ciclos 1
+& $pythonSim simulator/braquio_simulator.py --help
 ```
 
 macOS/Linux (usar `python3 -m venv simulator/.venv` si no existe `python`):
 
 ```bash
 simulator/.venv/bin/python -m pip install -r simulator/requirements.txt
-simulator/.venv/bin/python simulator/braquio_simulator.py --demo --pacientes 3 --escenario normal --ciclos 1
+simulator/.venv/bin/python simulator/braquio_simulator.py --help
 ```
 
 Si aparece `unrecognized arguments` y la ayuda solo muestra `-p` y `-c`,
@@ -361,11 +553,14 @@ simulator/.venv/bin/python simulator/braquio_simulator.py --help
 Escribir `--escenario` sin espacios entre los guiones y el nombre.
 El aviso de actualizacion de pip no impide ejecutar el simulador.
 
-`--demo` fija cama-01 a NORMAL_GOTEO/500 mL y cama-02 a MICRO_GOTEO/250 mL,
-compatibles con DemoSeeder, y conserva esos modos al cambiar la bolsa.
-No modifica sesiones ni crea pacientes en la base. El resto de las camas
-mantiene los modos del generador. Sin `--demo`, los modos iniciales son
-aleatorios y el servicio descarta los que no coincidan con la sesion activa.
+**Compatibilidad del flujo anterior sin --simulador:** esta correccion no modifica archivos
+de `simulator/`. En la version integrada anteriormente, `--demo` fija cama-01
+a NORMAL_GOTEO y cama-02 a MICRO_GOTEO: es incompatible con el contrato actual.
+Sin `--demo`, esa version elige modos aleatorios; quitar la opcion tampoco
+garantiza compatibilidad. Confirmar con el responsable del simulador la rama y
+un lote real con cama-01 MICRO_GOTEO y cama-02 NORMAL_GOTEO antes de repetir la
+prueba conjunta. El backend rechaza diferencias de modo e informa cama,
+sesion, modo_recibido y modo_esperado; no adapta silenciosamente las sesiones.
 
 `--ciclos 1` publica un solo lote y termina. Sin esa opcion, se publican lotes
 cada cinco segundos hasta Ctrl+C (`--ciclo` ajusta ese intervalo). El simulador
@@ -374,9 +569,10 @@ error en lugar de anunciar envios que no ocurrieron.
 
 ### Casos de aceptacion
 
-Repetir el comando del simulador cambiando solo `--escenario`. Con los tres
-pacientes anteriores y sesiones demo sin modificar, estos son los incrementos
-por lote; esperar los logs del receptor antes de consultar la base:
+Con un emisor que cumpla el contrato anterior, estos son los incrementos por
+lote de cuatro camas (una lectura por cama); esperar los logs del receptor
+antes de consultar la base. Si el emisor admite `--escenario`, seleccionar
+los valores de la tabla; comprobar los modos en el JSON enviado.
 
 | Escenario | Lecturas nuevas | Alertas nuevas | Tipos |
 | --- | ---: | ---: | --- |
@@ -386,12 +582,46 @@ por lote; esperar los logs del receptor antes de consultar la base:
 | rapido | 2 | 2 | GOTEO_RAPIDO |
 | combinado | 2 | 4 | FIN_BOLSA y GOTEO_LENTO por sesion |
 
-En todos los casos cama-03 genera warning y no agrega registros. Los escenarios
+En todos los casos cama-03 y cama-04 generan warning y no agregan registros.
+Un lote de cuatro camas agrega dos lecturas, no cuatro. Tres lotes normales
+agregan seis lecturas: no existe un limite de dos lecturas acumuladas.
+Las camas sin sesion activa no interrumpen los otros elementos del lote.
+Los escenarios
 son opciones de prueba del generador y calculan el tiempo restante; no representan
 un tratamiento real. El modo por defecto `aleatorio` conserva la simulacion
 variable. Los umbrales corregidos el 06/10/2026 son lento <20 y rapido >60;
 20 y 60 exactos no generan alertas de goteo. Los escenarios lento/combinado
 usan 19.9 gotas/min y rapido usa 60.1 para probar los nuevos limites.
+
+### Diagnostico MQTT sin modificar el simulador
+
+Para separar la persistencia del generador, se puede publicar un lote controlado
+desde PowerShell con UN listener activo. Esta prueba agrega dos lecturas reales
+a la base de desarrollo; no es una prueba del generador del companero.
+
+```powershell
+$marcaMqtt = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
+$loteMqtt = @(1..4 | ForEach-Object {
+    $modoMqtt = if ($_ -eq 1) { 'MICRO_GOTEO' } else { 'NORMAL_GOTEO' }
+    $factorMqtt = if ($_ -eq 1) { 60 } else { 20 }
+    @{
+        pacienteId = ('cama-{0:D2}' -f $_)
+        gotasPorMin = 32.5
+        tiempoRestante = [int][Math]::Floor(500 * $factorMqtt / 32.5)
+        volRestante = 500.0
+        modo = $modoMqtt
+        timestamp = $marcaMqtt
+    }
+})
+$loteMqtt | ConvertTo-Json -Depth 3 -Compress | docker compose exec -T broker mosquitto_pub -h localhost -t hospital/braquio/telemetria -s
+if ($LASTEXITCODE -ne 0) { throw 'Fallo la publicacion MQTT' }
+```
+
+Esperado: lote recibido con paquetes=4, dos lecturas y warnings para camas 3/4.
+Si aparece modo incompatible, comparar modo_recibido y modo_esperado. Si el
+listener ni siquiera anuncia el lote, revisar que este conectado antes del
+envio, el broker y el topic. Un contenedor backend healthy solo comprueba HTTP;
+no significa que el proceso `mqtt:listen` este ejecutandose.
 
 En pgAdmin, conectado a `dinostar_rex` (localhost:5433), consultar antes y despues:
 
@@ -422,10 +652,10 @@ alertas independientes, resuelta=false y warning sin inserciones si no hay sesio
 `MqttPacketProcessorTest` cubre JSON incorrecto, formas no admitidas, continuidad
 despues de errores y persistencia de lotes mixtos con PostgreSQL. La prueba de
 persistencia requiere la base aislada y DINOSTAR_MIGRATION_TEST de la seccion
-de migraciones. Desde backend, ejecutar los cuatro archivos:
+de migraciones. Desde backend, ejecutar las pruebas de backend y configuracion:
 
 ```text
-php artisan test --compact tests/Feature/DomainMigrationsTest.php tests/Feature/DemoSeederTest.php tests/Feature/DataPacketServiceTest.php tests/Feature/MqttPacketProcessorTest.php
+php artisan test --compact tests/Feature/DomainMigrationsTest.php tests/Feature/DemoSeederTest.php tests/Feature/DataPacketServiceTest.php tests/Feature/MqttPacketProcessorTest.php tests/Feature/SesionTipoSolucionTest.php tests/Feature/ConfigureMqttDemoTest.php tests/Feature/SimulatorReceptionTest.php
 ```
 
 Para las pruebas del generador, desde la raiz, usar el Python del entorno virtual.
@@ -456,9 +686,21 @@ sin alertas de goteo. Los registros historicos no se recalculan ni se borran.
 Tras descargar esta correccion, reconstruir el backend con Compose y volver
 a iniciar `mqtt:listen` para cargar el servicio actualizado.
 
+El 13/10/2026 se reprodujo el contrato nuevo contra los seeds anteriores:
+un lote de cuatro camas guardaba cero lecturas por modos invertidos. Tras la
+correccion pasaron 30 pruebas PHP con 338 aserciones en PostgreSQL aislado.
+Se probaron ademas Mosquitto, el listener real y PostgreSQL desechables con
+seis lotes de cuatro camas: 12 lecturas nuevas (seis por sesion), ocho alertas
+(cuatro GOTEO_LENTO, dos GOTEO_RAPIDO y dos FIN_BOLSA) y ninguna sesion nueva.
+Un JSON invalido entre los lotes no impidio guardar el siguiente.
+Esta prueba utilizo un publicador de diagnostico, no el simulador: la verificacion
+con la version del generador que cumpla el contrato y en macOS queda pendiente.
+El dashboard de esta revision utiliza datos estaticos; guardar en PostgreSQL
+no demuestra que la interfaz este conectada a las lecturas MQTT.
+
 Se mantiene QoS 0 y sesion MQTT limpia: el receptor debe estar conectado antes
 de publicar. No hay deduplicacion, reintentos persistentes, recuperacion de lotes
-perdidos ni cambios de sesion desde MQTT. Ante una desconexion del broker,
+perdidos. Los cambios de sesion requieren la opcion --simulador. Ante una desconexion del broker,
 reiniciar `mqtt:listen`. La confirmacion de publicacion del simulador no confirma
 por si misma la persistencia: comprobar los logs del servicio y PostgreSQL.
 
