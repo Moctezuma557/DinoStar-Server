@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { navigationItems } from "../config/navigation";
 import Icono from "../components/Icono";
 import styles from "./DashboardLayout.module.css";
+import logoDinoStar from "../assets/Logo.png";
 
 
 const FORMATO_FECHA = new Intl.DateTimeFormat("es-MX", {
@@ -70,7 +71,7 @@ export default function DashboardLayout({
     <div className={styles.shell}>
       <aside className={styles.sidebar}>
         <div className={styles.brand}>
-          <span className={styles.brandMark}>DinoStar</span>
+          <img src={logoDinoStar} alt="DinoStar" className={styles.brandLogo} />
           <span className={styles.brandSystem}>Sistema REX</span>
         </div>
 
