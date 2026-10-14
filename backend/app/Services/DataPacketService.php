@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Paciente;
 use App\Models\Sesion;
+use App\Events\NuevaLectura;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -68,11 +69,18 @@ class DataPacketService
         });
 
         if ($result !== null) {
-            DB::afterCommit(function () use ($data, $result): void {
-                Log::info('[DataPacketService] Lectura guardada para '.$data['pacienteId'].' - '.$data['gotasPorMin'].' gotas/min', $result);
-                foreach ($result['alertas'] as $type) {
-                    Log::info('[DataPacketService] Alerta guardada: '.$type, ['sesion_id' => $result['sesion_id']]);
-                }
+            DB::afterCommit(function () use ($data): void {
+                Log::info('[DataPacketService] Lectura guardada para '.$data['pacienteId'].' - '.$data['gotasPorMin'].' gotas/min');
+
+                // Disparar el evento de broadcast por Reverb de forma segura tras el commit
+                broadcast(new NuevaLectura(
+                    pacienteId: $data['pacienteId'],
+                    gotasPorMin: $data['gotasPorMin'],
+                    volRestante: $data['volRestante'],
+                    tiempoRestante: $data['tiempoRestante'],
+                    modo: $data['modo'],
+                    timestamp: $data['timestamp']
+                ));
             });
         }
     }
