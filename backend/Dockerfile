@@ -14,6 +14,9 @@ WORKDIR /var/www/html
 # Copiar el código base
 COPY . .
 
+# Preparar dependencias en Linux; Compose conserva vendor en su propio volumen.
+RUN composer install --no-interaction --prefer-dist --optimize-autoloader
+
 # Copiar el script de sincronización de dependencias y darle permisos de ejecución
 COPY update-local-deps.sh /usr/local/bin/update-local-deps.sh
 RUN chmod +x /usr/local/bin/update-local-deps.sh

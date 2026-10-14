@@ -10,7 +10,7 @@ class Sesion extends Model
 {
     protected $table = 'sesiones';
 
-    protected $fillable = ['paciente_id', 'enfermera_id', 'vol_total', 'modo_goteo', 'estado', 'inicio', 'fin'];
+    protected $fillable = ['paciente_id', 'enfermera_id', 'vol_total', 'tipo_solucion', 'modo_goteo', 'estado', 'inicio', 'fin'];
 
     protected function casts(): array
     {
