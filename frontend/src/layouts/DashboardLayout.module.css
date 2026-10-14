@@ -28,11 +28,10 @@
   padding-inline: var(--espacio-2);
 }
 
-.brandMark {
-  font-size: var(--texto-xl);
-  font-weight: var(--peso-bold);
-  color: var(--color-primario);
-  letter-spacing: -0.01em;
+.brandLogo {
+  width: 152px;
+  height: auto;
+  max-width: 100%;
 }
 
 .brandSystem {
