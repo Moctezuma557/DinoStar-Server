@@ -27,4 +27,6 @@ EXPOSE 8000
 ENTRYPOINT ["/usr/local/bin/update-local-deps.sh"]
 
 # CMD pasa como argumento al ENTRYPOINT (se ejecuta al final del script con exec "$@")
-CMD ["php", "artisan", "serve", "--host=0.0.0.0", "--port=8000"]
+# Preserve Compose environment variables in the HTTP child process even when
+# the bind mount contains a local .env (which may use another database).
+CMD ["php", "artisan", "serve", "--host=0.0.0.0", "--port=8000", "--no-reload"]

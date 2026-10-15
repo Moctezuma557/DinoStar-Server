@@ -1,5 +1,11 @@
 # DinoStar: Laravel y Reverb (actividad #6)
 
+## API de pacientes (actividad #68)
+
+Consultar [API_PACIENTES.md](API_PACIENTES.md) para el contrato, comandos Windows/macOS/Linux, pruebas aisladas y validación con MQTT. La [colección Postman](pacientes.postman_collection.json) incluye alta, listado, filtros, detalle y errores esperados.
+
+La guía de la actividad #6 que sigue describe el arranque original; para pacientes se requiere también PostgreSQL y las migraciones, según la guía #68.
+
 Desde la raiz del repositorio (donde esta docker-compose.yml), con Docker en modo Linux y Docker Compose 2.17 o posterior. No se necesita PHP ni Composer instalado en el equipo.
 
 Primera vez: copiar la plantilla SIN sobrescribir un .env existente:
