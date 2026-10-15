@@ -181,11 +181,11 @@ curl -i -H 'Accept: application/json' -H 'Content-Type: application/json' -d '{}
 rm -- "$solicitud"
 ```
 
-## Postman y evidencia para el PR
+## Pruebas con Postman
 
 Importar `backend/pacientes.postman_collection.json`. Configurar variables de colección `base_url` y `enfermera_id`. Ejecutar en orden las ocho solicitudes. La primera genera una cama `api-...` libre, guarda `paciente_id` y deja los datos ficticios en la base; las demás reutilizan esos valores. Cada ejecución completa crea otro paciente de prueba.
 
-Adjuntar capturas reales de POST 201, duplicado 409, listado 200, filtro 200, detalle 200 y errores 404/422. La colección contiene comprobaciones, pero el archivo JSON o los resultados de PHPUnit no reemplazan el criterio de capturas de Postman. No incluir datos personales reales en la evidencia.
+Los códigos esperados, en orden, son 201, 409, 200, 200, 200, 404, 422 y 422. Revisar el cuerpo de cada respuesta y la pestaña Test Results. Los rechazos 409, 404 y 422 son resultados correctos de las solicitudes negativas incluidas en la colección.
 
 ## Verificar en pgAdmin
 
@@ -254,11 +254,3 @@ Sin `DINOSTAR_MIGRATION_TEST=1` estas pruebas se omiten por protección: un resu
 docker stop dinostar-pacientes68-test-db
 docker rm -v dinostar-pacientes68-test-db
 ```
-
-### Resultado verificado el 14 de octubre de 2026
-
-- Windows, PHP 8.4 y PostgreSQL 15 aislado: **71 pruebas / 676 comprobaciones**, todas aprobadas y sin omisiones.
-- De ellas, **33 pruebas / 229 comprobaciones** cubren la API de pacientes, incluyendo cuatro altas seguidas de un lote MQTT mediante DataPacketService sin seeder.
-- HTTP real en puerto temporal 18068, cuatro procesos PHP: dos POST simultáneos para la misma cama produjeron **201 y 409**; la base conservó exactamente **1 paciente y 1 sesión**.
-- Listado, filtros y detalle por HTTP devolvieron 200; paciente inexistente 404; filtro inválido y POST vacío 422.
-- No se usó ni modificó la base habitual del proyecto durante estas pruebas. La ejecución en Mac y las capturas reales de Postman quedan para la validación del equipo.
