@@ -72,17 +72,13 @@ export default function DashboardLayout({
       <aside className={styles.sidebar}>
         <div className={styles.brand}>
           <img src={logoDinoStar} alt="DinoStar" className={styles.brandLogo} />
-          <span className={styles.brandSystem}>Sistema REX</span>
+         
         </div>
-
-        <p className={styles.systemStatus}>
-          <span className={styles.statusDot} aria-hidden="true" />
-          Sistema activo · en línea
-        </p>
 
         <nav className={styles.nav} aria-label="Navegación principal">
           <ul>
-            {navigationItems.map(({ id, label, to, badge }) => {
+
+            {navigationItems.map(({ id, label, to, icono,badge }) => {
               const isActive = id === activeItem;
               const badgeValue = badge ? badges[badge] : undefined;
 
@@ -95,7 +91,9 @@ export default function DashboardLayout({
                     }`}
                     aria-current={isActive ? "page" : undefined}
                     onClick={() => onNavigate?.(id, to)}
+                    
                   >
+                    <Icono nombre={icono} tamano={18} className={styles.navIcono} />
                     <span className={styles.navLabel}>{label}</span>
                     {badgeValue ? (
                       <span className={styles.navBadge}>{badgeValue}</span>
@@ -140,7 +138,6 @@ export default function DashboardLayout({
 
           <RelojSesion />
 
-          {}
           <button
             type="button"
             className={styles.sesion}
