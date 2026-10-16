@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from 'react';
 import TarjetaPaciente from "../components/TarjetaPaciente";
 import Icono from "../components/Icono";
+import echo from '../echo';
 import "./dashboard.css";
-
 
 const SALAS = [
   { id: "icu-oeste", nombre: "ICU – Ala Oeste (Adultos & Agudos)" },
@@ -17,73 +17,137 @@ function textoBuscable(paciente) {
     .toLowerCase();
 }
 
+// Cálculo del estado de la tarjeta según las reglas de la actividad
+function calcularEstadoTarjeta(gotasPorMin, volRestante) {
+  if (gotasPorMin < 15 || gotasPorMin > 80 || volRestante < 50) {
+    return { estado: "alerta", textoEstado: "ALERTA DE INFUSIÓN" };
+  }
+  if (gotasPorMin < 20 || gotasPorMin > 60 || volRestante < 100) {
+    return { estado: "atencion", textoEstado: "ATENCIÓN REQUERIDA" };
+  }
+  return { estado: "normal", textoEstado: "GOTEO REGULAR" };
+}
+
 export default function Dashboard() {
-  const [pacientes] = useState([
+  // Inicializamos en vacío para cumplir con que solo aparezcan si el servidor manda datos de camas con pacientes
+  const [pacientes, setPacientes] = useState([
     {
       id: 1,
-      nombre: "Valeria Perez",
-      edad: 42,
+      cama: "cama-01",
+      pacienteId: "cama-01",
+      nombre: "Valeria Pérez",
+      edad: 22,
       idPaciente: "Habitación 405-A • ID: 9104",
-      solucion: "Ringer Lactato",
-      tipoEquipo: "MICRO (60 GTT/ML)",
-      gotasPorMin: 80,
-      estadoRitmo: "Constante 1 gtt",
-      flujoActual: 80,
-      metaFlujo: 80,
-      porcentajeVolumen: 45,
-      volRestante: 225,
-      volTotal: 500,
-      tiempoRestante: "Restan est. 2h 45m",
-      estado: "normal",
-      textoEstado: "GOTEO REGULAR",
-      nombreSolucion: "Solución Lactato 0.9%",
-      tipoBajante: "MICRO (10 GTT/ML)",
-    },
-    {
-      id: 2,
-      nombre: "Carlos Martinez",
-      edad: 38,
-      idPaciente: "Habitación 403-B • ID: 8821",
-      solucion: "Solución Salina 0.9%",
-      tipoEquipo: "MACRO (20 GTT/ML)",
-      gotasPorMin: 25,
-      estadoRitmo: "Lento -5 gtt",
+      gotasPorMin: 45,
+      estadoRitmo: "Constante",
       flujoActual: 45,
       metaFlujo: 60,
-      porcentajeVolumen: 30,
-      volRestante: 150,
+      porcentajeVolumen: 60,
+      volRestante: 300,
       volTotal: 500,
-      tiempoRestante: "Restan est. 1h 30m",
-      estado: "atencion",
-      textoEstado: "ATENCIÓN REQUERIDA",
+      tiempoRestante: "Restan est. 2h 00m",
+      estado: "normal",
+      textoEstado: "GOTEO REGULAR",
       nombreSolucion: "Solución Salina 0.9%",
-      tipoBajante: "MACRO (10 GTT/ML)",
-    },
-    {
-      id: 3,
-      nombre: "Anna Garcia",
-      edad: 55,
-      idPaciente: "Habitación 406-C • ID: 7490",
-      solucion: "Glucosa al 5%",
-      tipoEquipo: "MICRO (60 GTT/ML)",
-      gotasPorMin: 10,
-      estadoRitmo: "Obstrucción detectada",
-      flujoActual: 10,
-      metaFlujo: 50,
-      porcentajeVolumen: 7,
-      volRestante: 35,
-      volTotal: 500,
-      tiempoRestante: "Restan est. 20m",
-      estado: "alerta",
-      textoEstado: "ALERTA DE INFUSIÓN",
-      nombreSolucion: "Lactato Glucosado 5%",
-      tipoBajante: "MICRO (10 GTT/ML)",
-    },
+      tipoBajante: "MICRO (60 GTT/ML)"
+    }
   ]);
 
   const [sala, setSala] = useState(SALAS[0].id);
   const [busqueda, setBusqueda] = useState("");
   const [filtro, setFiltro] = useState("todos");
+
+  useEffect(() => {
+    console.log("¡El componente Dashboard se montó correctamente!");
+
+    const channel = echo.channel('pacientes');
+
+    channel.subscription.bind('pusher:subscription_succeeded', () => {
+      console.log("✅ ¡Suscripción exitosa y confirmada al canal 'pacientes'!");
+    });
+
+    channel.listen('.nueva.lectura', (e) => {
+      console.log("🚀 ¡EVENTO RECIBIDO DEL SIMULADOR:", e);
+
+      // Extraer la lista de paquetes del evento de Reverb
+      const rawData = e.datapacket || e.data || e;
+      const packetsList = Array.isArray(rawData) ? rawData : [rawData];
+
+      setPacientes((prevPacientes) => {
+        let updatedPacientes = [...prevPacientes];
+
+        packetsList.forEach((packet) => {
+          // El simulador manda "pacienteId" (ej: "cama-01")
+          const camaRecibida = packet.pacienteId || packet.cama;
+          if (!camaRecibida) return;
+
+          // Buscar si ya existe la tarjeta con esa cama o id
+          const index = updatedPacientes.findIndex(
+            (p) => p.cama === camaRecibida || p.pacienteId === camaRecibida || p.idPaciente?.includes(camaRecibida)
+          );
+
+          const gotas = Number(packet.gotasPorMin) || 0;
+          const volumen = Number(packet.volRestante) || 0;
+          const tiempoMinutos = Number(packet.tiempoRestante) || 0;
+
+          // Formatear el tiempo restante a horas y minutos legibles
+          const horas = Math.floor(tiempoMinutos / 60);
+          const mins = tiempoMinutos % 60;
+          const textoTiempo = `Restan est. ${horas}h ${mins}m`;
+
+          // Calcular estado de alerta según los umbrales de infusión
+          let estadoCalculado = "normal";
+          let textoEstadoCalculado = "GOTEO REGULAR";
+          if (gotas < 15 || gotas > 80 || volumen < 50) {
+            estadoCalculado = "alerta";
+            textoEstadoCalculado = "ALERTA DE INFUSIÓN";
+          }
+
+          if (index !== -1) {
+            // Actualizar la tarjeta existente con los nuevos valores del simulador
+            updatedPacientes[index] = {
+              ...updatedPacientes[index],
+              gotasPorMin: gotas,
+              flujoActual: gotas,
+              volRestante: volumen,
+              porcentajeVolumen: Math.round((volumen / 500) * 100),
+              tiempoRestante: textoTiempo,
+              estado: estadoCalculado,
+              textoEstado: textoEstadoCalculado,
+            };
+          } else {
+            // Si la tarjeta no existe, crearla dinámicamente para la cama recibida
+            updatedPacientes.push({
+              id: Date.now() + Math.random(),
+              cama: camaRecibida,
+              pacienteId: camaRecibida,
+              nombre: `Paciente Cama ${camaRecibida}`,
+              edad: 28,
+              idPaciente: `Habitación • ID: ${camaRecibida}`,
+              gotasPorMin: gotas,
+              estadoRitmo: packet.modo || "Constante",
+              flujoActual: gotas,
+              metaFlujo: 60,
+              porcentajeVolumen: Math.round((volumen / 500) * 100),
+              volRestante: volumen,
+              volTotal: 500,
+              tiempoRestante: textoTiempo,
+              estado: estadoCalculado,
+              textoEstado: textoEstadoCalculado,
+              nombreSolucion: "Solución Salina 0.9%",
+              tipoBajante: "MICRO (60 GTT/ML)"
+            });
+          }
+        });
+
+        return updatedPacientes;
+      });
+    });
+
+    return () => {
+      echo.leave('pacientes');
+    };
+  }, []);
 
   const totalAlertas = pacientes.filter((p) => p.estado === "alerta").length;
 
@@ -168,7 +232,7 @@ export default function Dashboard() {
         ) : (
           <div className="grid-tarjetas-pacientes">
             {pacientesVisibles.map((paciente) => (
-              <TarjetaPaciente key={paciente.id} {...paciente} />
+              <TarjetaPaciente key={paciente.id || paciente.cama} {...paciente} />
             ))}
           </div>
         )}

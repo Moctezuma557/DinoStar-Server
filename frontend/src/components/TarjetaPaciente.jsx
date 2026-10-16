@@ -22,11 +22,6 @@ export default function TarjetaPaciente({
     <div className={`tarjeta-paciente-componente estado-${estado}`}>
       <div className={`tarjeta-paciente-header estado-${estado}`}>
         <div className="header-estado-info">
-          <span className="icono-estado">
-            {estado === 'normal' }
-            {estado === 'atencion' }
-            {estado === 'alerta'}
-          </span>
           <span className="texto-estado-header">{textoEstado || "GOTEO REGULAR"}</span>
         </div>
         <span className="badge-estable">{estado.toUpperCase() === 'NORMAL' ? 'ESTABLE' : estado.toUpperCase()}</span>
