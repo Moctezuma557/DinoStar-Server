@@ -22,41 +22,13 @@
 }
 
 .brand {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
   padding-inline: var(--espacio-2);
 }
 
-.brandMark {
-  font-size: var(--texto-xl);
-  font-weight: var(--peso-bold);
-  color: var(--color-primario);
-  letter-spacing: -0.01em;
-}
-
-.brandSystem {
-  font-size: var(--texto-xs);
-  font-weight: var(--peso-medio);
-  color: var(--color-texto-secundario);
-}
-
-.systemStatus {
-  display: flex;
-  align-items: center;
-  gap: var(--espacio-2);
-  padding-inline: var(--espacio-2);
-  font-size: var(--texto-xs);
-  font-weight: var(--peso-medio);
-  color: var(--color-texto-secundario);
-}
-
-.statusDot {
-  width: 8px;
-  height: 8px;
-  border-radius: var(--radio-pildora);
-  background-color: var(--color-normal);
-  flex-shrink: 0;
+.brandLogo {
+  width: 152px;
+  height: auto;
+  max-width: 100%;
 }
 
 .nav {
@@ -102,6 +74,10 @@
 
 .navLabel {
   flex: 1;
+}
+
+.navIcono {
+  flex-shrink: 0;
 }
 
 .navBadge {

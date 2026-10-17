@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { navigationItems } from "../config/navigation";
 import Icono from "../components/Icono";
 import styles from "./DashboardLayout.module.css";
+import logoDinoStar from "../assets/Logo.png";
 
 
 const FORMATO_FECHA = new Intl.DateTimeFormat("es-MX", {
@@ -70,18 +71,14 @@ export default function DashboardLayout({
     <div className={styles.shell}>
       <aside className={styles.sidebar}>
         <div className={styles.brand}>
-          <span className={styles.brandMark}>DinoStar</span>
-          <span className={styles.brandSystem}>Sistema REX</span>
+          <img src={logoDinoStar} alt="DinoStar" className={styles.brandLogo} />
+         
         </div>
-
-        <p className={styles.systemStatus}>
-          <span className={styles.statusDot} aria-hidden="true" />
-          Sistema activo · en línea
-        </p>
 
         <nav className={styles.nav} aria-label="Navegación principal">
           <ul>
-            {navigationItems.map(({ id, label, to, badge }) => {
+
+            {navigationItems.map(({ id, label, to, icono,badge }) => {
               const isActive = id === activeItem;
               const badgeValue = badge ? badges[badge] : undefined;
 
@@ -94,7 +91,9 @@ export default function DashboardLayout({
                     }`}
                     aria-current={isActive ? "page" : undefined}
                     onClick={() => onNavigate?.(id, to)}
+                    
                   >
+                    <Icono nombre={icono} tamano={18} className={styles.navIcono} />
                     <span className={styles.navLabel}>{label}</span>
                     {badgeValue ? (
                       <span className={styles.navBadge}>{badgeValue}</span>
@@ -139,7 +138,6 @@ export default function DashboardLayout({
 
           <RelojSesion />
 
-          {}
           <button
             type="button"
             className={styles.sesion}

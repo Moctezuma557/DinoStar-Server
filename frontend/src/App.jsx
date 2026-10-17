@@ -14,6 +14,7 @@ import { navigationItems } from "./config/navigation";
 import Login from "./pages/login";
 import Dashboard from "./pages/dashboard";
 import Paciente from "./pages/paciente";
+import Pacientes from "./pages/pacientes";
 
 // Datos temporales hasta que exista la autenticación real.
 const enfermeraDemo = {
@@ -64,6 +65,7 @@ export default function App() {
         {/* Dentro del layout */}
         <Route element={<AppShell />}>
           <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/pacientes" element={<Pacientes />} />
           <Route path="/paciente/:id" element={<Paciente />} />
           <Route path="*" element={<VistaEnConstruccion />} />
         </Route>
