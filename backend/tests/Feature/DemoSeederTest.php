@@ -62,8 +62,9 @@ class DemoSeederTest extends TestCase
             $this->assertSame($nurse->id, $session->enfermera_id);
             $this->assertSame($session->id, $session->paciente_id);
             $normal = $session->modo_goteo === 'NORMAL_GOTEO';
+            $this->assertSame($session->id === -35001 ? 'MICRO_GOTEO' : 'NORMAL_GOTEO', $session->modo_goteo);
             $this->assertContains($session->modo_goteo, ['NORMAL_GOTEO', 'MICRO_GOTEO']);
-            $this->assertEquals($normal ? 500 : 250, $session->vol_total);
+            $this->assertEquals($session->id === -35001 ? 500 : 250, $session->vol_total);
             $readings = DB::table('lecturas')->where('sesion_id', $session->id)->orderBy('timestamp_dispositivo')->get();
             $this->assertCount(5, $readings);
             $previous = (float) $session->vol_total + 1;
