@@ -58,16 +58,9 @@ export default function Dashboard() {
   const [filtro, setFiltro] = useState("todos");
 
   useEffect(() => {
-    console.log("¡El componente Dashboard se montó correctamente!");
-
     const channel = echo.channel('pacientes');
 
-    channel.subscription.bind('pusher:subscription_succeeded', () => {
-      console.log("✅ ¡Suscripción exitosa y confirmada al canal 'pacientes'!");
-    });
-
     channel.listen('.nueva.lectura', (e) => {
-      console.log("🚀 ¡EVENTO RECIBIDO DEL SIMULADOR:", e);
 
       // Extraer la lista de paquetes del evento de Reverb
       const rawData = e.datapacket || e.data || e;
@@ -95,13 +88,10 @@ export default function Dashboard() {
           const mins = tiempoMinutos % 60;
           const textoTiempo = `Restan est. ${horas}h ${mins}m`;
 
-          // Calcular estado de alerta según los umbrales de infusión
-          let estadoCalculado = "normal";
-          let textoEstadoCalculado = "GOTEO REGULAR";
-          if (gotas < 15 || gotas > 80 || volumen < 50) {
-            estadoCalculado = "alerta";
-            textoEstadoCalculado = "ALERTA DE INFUSIÓN";
-          }
+          // Calcular estado usando la función auxiliar que ya definiste arriba
+          const infoEstado = calcularEstadoTarjeta(gotas, volumen);
+          const estadoCalculado = infoEstado.estado;
+          const textoEstadoCalculado = infoEstado.textoEstado;
 
           if (index !== -1) {
             // Actualizar la tarjeta existente con los nuevos valores del simulador

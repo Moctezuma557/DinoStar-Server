@@ -5,11 +5,11 @@ window.Pusher = Pusher;
 
 const echo = new Echo({
     broadcaster: 'reverb',
-    key: import.meta.env.VITE_REVERB_APP_KEY || 'dinostar-local',
-    wsHost: import.meta.env.VITE_REVERB_HOST || 'localhost',
-    wsPort: import.meta.env.VITE_REVERB_PORT ? Number(import.meta.env.VITE_REVERB_PORT) : 8080,
-    wssPort: import.meta.env.VITE_REVERB_PORT ? Number(import.meta.env.VITE_REVERB_PORT) : 8080,
-    forceTLS: (import.meta.env.VITE_REVERB_SCHEME ?? 'http') === 'https',
+    key: 'dinostar-local',
+    wsHost: 'localhost',
+    wsPort: 8080,
+    wssPort: 8080,
+    forceTLS: false,
     enabledTransports: ['ws', 'wss'],
 });
 
