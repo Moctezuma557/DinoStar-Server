@@ -78,6 +78,10 @@ class DemoSeeder extends Seeder
 
                 // Insertar lecturas iniciales de prueba para esta sesión
                 $session = DB::table('sesiones')->where('id', $sessionId)->first();
+                if ($session->modo_goteo !== $mode) {
+                    $this->command?->warn('La sesión demo '.$sessionId.' conserva su modo anterior. Revisar demo:configurar-mqtt --dry-run.');
+                }
+                $dropFactor = $session->modo_goteo === 'MICRO_GOTEO' ? 60 : 20;
                 for ($index = 0; $index < 5; $index++) {
                     $drops = 20 + ($index * 10);
                     $remaining = round((float) ($session->vol_total - ($index * 0.05)), 2);

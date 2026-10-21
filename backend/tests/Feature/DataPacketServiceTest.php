@@ -47,7 +47,7 @@ class DataPacketServiceTest extends TestCase
     {
         return array_replace(['pacienteId' => 'cama-01', 'gotasPorMin' => 32.5,
             'tiempoRestante' => 245, 'volRestante' => 408.5,
-            'modo' => 'NORMAL_GOTEO', 'timestamp' => 1726185600123], $changes);
+            'modo' => 'MICRO_GOTEO', 'timestamp' => 1726185600123], $changes);
     }
 
     private function demo(): void
@@ -116,7 +116,11 @@ class DataPacketServiceTest extends TestCase
     {
         $this->demo();
         Log::spy();
-        app(DataPacketService::class)->procesar($this->packet(['modo' => 'MICRO_GOTEO']));
+        app(DataPacketService::class)->procesar($this->packet(['modo' => 'NORMAL_GOTEO']));
+        Log::shouldHaveReceived('warning')->with('[DataPacketService] Modo incompatible con la sesión activa.', [
+            'pacienteId' => 'cama-01', 'sesion_id' => -35001,
+            'modo_recibido' => 'NORMAL_GOTEO', 'modo_esperado' => 'MICRO_GOTEO',
+        ])->once();
         Paciente::create(['nombre' => 'Otro paciente', 'numero_cama' => 'cama-01', 'sala' => 'Sala B', 'activo' => true]);
         app(DataPacketService::class)->procesar($this->packet());
         $this->assertSame(10, Lectura::count());

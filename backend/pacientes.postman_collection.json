@@ -1,0 +1,274 @@
+{
+  "info": {
+    "name": "DinoStar — Pacientes (#68)",
+    "description": "API local de pacientes. Configura enfermera_id con una ENFERMERA activa. Ejecuta en orden: el primer POST crea datos de prueba persistentes y genera una cama nueva. No ejecuta seeders ni limpia datos.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000"
+    },
+    {
+      "key": "enfermera_id",
+      "value": ""
+    },
+    {
+      "key": "numero_cama",
+      "value": ""
+    },
+    {
+      "key": "paciente_id",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "01 Crear paciente y sesión",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base_url}}/api/pacientes",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"nombre\": \"Paciente API prueba\",\n  \"numero_cama\": \"{{numero_cama}}\",\n  \"sala\": \"Pruebas API\",\n  \"vol_total\": 500,\n  \"modo_goteo\": \"MICRO_GOTEO\",\n  \"tipo_solucion\": \"Salina 0.9%\",\n  \"enfermera_id\": \"{{enfermera_id}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if (!pm.collectionVariables.get(\"enfermera_id\")) { throw new Error(\"Configura enfermera_id antes de ejecutar.\"); }",
+              "pm.collectionVariables.set(\"numero_cama\", \"api-\" + Date.now());"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));",
+              "if (pm.response.code === 201) { pm.collectionVariables.set(\"paciente_id\", pm.response.json().data.id); }",
+              "pm.test(\"Sesión activa asignada\", () => { const d = pm.response.json().data; pm.expect(d.sesion.estado).to.eql(\"ACTIVA\"); pm.expect(d.sesion.enfermera_id).to.eql(Number(pm.collectionVariables.get(\"enfermera_id\"))); pm.expect(d.sesion.tipo_solucion).to.eql(\"Salina 0.9%\"); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 Rechazar cama ocupada",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base_url}}/api/pacientes",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"nombre\": \"Paciente API prueba\",\n  \"numero_cama\": \"{{numero_cama}}\",\n  \"sala\": \"Pruebas API\",\n  \"vol_total\": 500,\n  \"modo_goteo\": \"MICRO_GOTEO\",\n  \"tipo_solucion\": \"Salina 0.9%\",\n  \"enfermera_id\": \"{{enfermera_id}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 409\", () => pm.response.to.have.status(409));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 Listar pacientes activos",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base_url}}/api/pacientes"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "pm.test(\"Incluye paciente creado\", () => pm.expect(pm.response.json().data.some(p => String(p.id) === String(pm.collectionVariables.get(\"paciente_id\")))).to.eql(true));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 Filtrar nombre y enfermera",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base_url}}/api/pacientes?nombre=Paciente%20API%20prueba&enfermera_id={{enfermera_id}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "pm.test(\"Filtra enfermera\", () => pm.response.json().data.forEach(p => pm.expect(p.enfermera_id).to.eql(Number(pm.collectionVariables.get(\"enfermera_id\")))));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 Detalle y lecturas de sesión actual",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base_url}}/api/pacientes/{{paciente_id}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "pm.test(\"Incluye historial\", () => pm.expect(pm.response.json().data.sesion.lecturas).to.be.an(\"array\"));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 Paciente inexistente",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base_url}}/api/pacientes/999999999999999999"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 404\", () => pm.response.to.have.status(404));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "07 Validación de campos",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base_url}}/api/pacientes",
+        "body": {
+          "mode": "raw",
+          "raw": "{}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 422\", () => pm.response.to.have.status(422));",
+              "pm.test(\"Requiere enfermera\", () => pm.expect(pm.response.json().errors).to.have.property(\"enfermera_id\"));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "08 Filtro inválido",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base_url}}/api/pacientes?enfermera_id=abc"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 422\", () => pm.response.to.have.status(422));"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
