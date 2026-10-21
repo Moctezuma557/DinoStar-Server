@@ -89,36 +89,41 @@ class DataPacketService
         $result = DB::transaction(function () use ($data, $simulation): ?array {
             $patients = Paciente::query()->where('numero_cama', $data['pacienteId'])
                 ->where('activo', true)->lockForUpdate()->get();
+            
             if ($patients->count() > 1) {
                 Log::warning('[DataPacketService] Cama ambigua; no se guardaron datos.', ['pacienteId' => $data['pacienteId']]);
 
                 return null;
             }
-            $session = null;
-            if ($patients->isNotEmpty()) {
-                $session = $simulation === null
-                    ? Sesion::query()->where('paciente_id', $patients->first()->id)->where('estado', 'ACTIVA')->lockForUpdate()->first()
-                    : $this->sesionSimulada($patients->first(), $data, $simulation);
-            }
+
+            $session = $patients->isEmpty() ? null : Sesion::query()
+                ->where('paciente_id', $patients->first()->id)->where('estado', 'ACTIVA')->lockForUpdate()->first();
+            
             if ($session === null) {
                 Log::warning('[DataPacketService] No hay sesión activa para: '.$data['pacienteId']);
 
                 return null;
             }
-            if ($session->modo_goteo !== $data['modo']) {
-                Log::warning('[DataPacketService] Modo incompatible con la sesión activa.', [
-                    'pacienteId' => $data['pacienteId'], 'sesion_id' => $session->id,
-                    'modo_recibido' => $data['modo'], 'modo_esperado' => $session->modo_goteo,
-                ]);
 
-                return null;
+            // MODIFICACIÓN: Si el modo del paquete no coincide con la sesión, 
+            // en lugar de rechazarlo, actualizamos la sesión de forma flexible para aceptarlo.
+            if ($session->modo_goteo !== $data['modo']) {
+                Log::info('[DataPacketService] Ajustando modo de sesión activo al recibido por el dispositivo.', [
+                    'sesion_id' => $session->id,
+                    'modo_anterior' => $session->modo_goteo,
+                    'modo_nuevo' => $data['modo']
+                ]);
+                
+                $session->update(['modo_goteo' => $data['modo']]);
             }
+
             $reading = $session->lecturas()->create([
                 'gotas_por_min' => $data['gotasPorMin'],
                 'vol_restante' => $data['volRestante'],
                 'tiempo_restante_min' => $data['tiempoRestante'],
                 'timestamp_dispositivo' => CarbonImmutable::createFromTimestampMs($data['timestamp'], 'UTC'),
             ]);
+
             $alerts = [];
             if ($data['volRestante'] < 50) {
                 $alerts['FIN_BOLSA'] = 'Volumen restante crítico: '.$data['volRestante'].' mL';
