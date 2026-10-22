@@ -190,4 +190,3 @@ class DataPacketService
         return $created;
     }
 }
-}
