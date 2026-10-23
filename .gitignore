@@ -81,3 +81,5 @@ backend/boost.json
 
 # ===== VENV =====
 simulator/venv/
+
+node_modules/
