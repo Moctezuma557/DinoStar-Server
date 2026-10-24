@@ -142,7 +142,7 @@ class DataPacketService
         });
 
         if ($result !== null) {
-            DB::afterCommit(function () use ($data): void {
+            DB::afterCommit(function () use ($data, $result): void {
                 Log::info('[DataPacketService] Lectura guardada para '.$data['pacienteId'].' - '.$data['gotasPorMin'].' gotas/min');
 
                 // Disparar el evento de broadcast por Reverb de forma segura tras el commit
@@ -152,7 +152,10 @@ class DataPacketService
                     volRestante: $data['volRestante'],
                     tiempoRestante: $data['tiempoRestante'],
                     modo: $data['modo'],
-                    timestamp: $data['timestamp']
+                    timestamp: $data['timestamp'],
+                    alertas: $result['alertas'],
+                    lecturaId: $result['lectura_id'],
+                    sesionId: $result['sesion_id']
                 ));
             });
         }

@@ -13,16 +13,28 @@ class NuevaLectura implements ShouldBroadcast
     use Dispatchable, InteractsWithSockets, SerializesModels;
 
     public $pacienteId;
+
     public $gotasPorMin;
+
     public $volRestante;
+
     public $tiempoRestante;
+
     public $modo;
+
     public $timestamp;
+
+    /** @var list<string> Alert types generated for this reading only. */
+    public array $alertas;
+
+    public ?int $lecturaId;
+
+    public ?int $sesionId;
 
     /**
      * Create a new event instance.
      */
-    public function __construct($pacienteId, $gotasPorMin, $volRestante, $tiempoRestante, $modo, $timestamp)
+    public function __construct($pacienteId, $gotasPorMin, $volRestante, $tiempoRestante, $modo, $timestamp, array $alertas = [], ?int $lecturaId = null, ?int $sesionId = null)
     {
         $this->pacienteId = $pacienteId;
         $this->gotasPorMin = $gotasPorMin;
@@ -30,12 +42,15 @@ class NuevaLectura implements ShouldBroadcast
         $this->tiempoRestante = $tiempoRestante;
         $this->modo = $modo;
         $this->timestamp = $timestamp;
+        $this->alertas = $alertas;
+        $this->lecturaId = $lecturaId;
+        $this->sesionId = $sesionId;
     }
 
     /**
      * Get the channels the event should broadcast on.
      *
-     * @return array<int, \Illuminate\Broadcasting\Channel>
+     * @return array<int, Channel>
      */
     public function broadcastOn(): array
     {
