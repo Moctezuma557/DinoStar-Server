@@ -1,91 +1,130 @@
-.banner {
-  display: flex;
-  align-items: center;
-  gap: var(--espacio-4);
-  padding: var(--espacio-4) var(--espacio-5);
-  border-radius: var(--radio-lg);
-  background-color: var(--color-alerta);
-  color: var(--color-texto-inverso);
-  box-shadow: var(--sombra-panel);
-}
-
-.icono {
-  display: flex;
-  flex-shrink: 0;
-}
-
-/* ---------- Texto ---------- */
-
-.contenido {
-  flex: 1;
-  min-width: 0;
+.container {
+  position: fixed;
+  top: 60px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 99999;
+  width: 440px;
+  max-width: 95vw;
+  background-color: var(--color-superficie, #ffffff);
+  border-radius: var(--radio-lg, 16px);
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.15), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  border: 1px solid #fecaca;
+  padding: var(--espacio-5, 20px);
   display: flex;
   flex-direction: column;
-  gap: var(--espacio-1);
+  gap: var(--espacio-4, 16px);
 }
 
-.encabezado {
+.header {
   display: flex;
   align-items: center;
-  gap: var(--espacio-3);
-  flex-wrap: wrap;
+  justify-content: space-between;
+  padding-bottom: var(--espacio-3);
+  border-bottom: 1px solid var(--color-borde);
 }
 
-.etiqueta {
-  padding: 2px var(--espacio-2);
-  border-radius: var(--radio-pildora);
-  background-color: rgba(255, 255, 255, 0.22);
+.tituloWrapper {
+  display: flex;
+  align-items: center;
+  gap: var(--espacio-2);
+}
+
+
+
+.titulo {
+  color: var(--color-alerta);
+  font-size: var(--texto-sm, 14px);
+  font-weight: var(--peso-bold);
+  letter-spacing: 0.02em;
+}
+
+.badgeAlerta {
+  background-color: var(--color-alerta);
+  color: var(--color-texto-inverso);
   font-size: var(--texto-xs);
   font-weight: var(--peso-semibold);
-  letter-spacing: 0.04em;
+  padding: 2px var(--espacio-3);
+  border-radius: var(--radio-pildora);
   text-transform: uppercase;
 }
 
-.paciente {
-  font-size: var(--texto-lg);
-  font-weight: var(--peso-semibold);
+/* Estilo para 1 o varias alertas en columna */
+.cuerpoGrid1 {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-3);
+  max-height: 380px;
+  overflow-y: auto;
 }
 
-.cama {
+/* Estilo exacto cuando hay 4 alertas: cuadrícula de 2x2 */
+.cuerpoGrid4 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--espacio-3);
+  max-height: 380px;
+  overflow-y: auto;
+}
+
+.tarjetaAlerta {
+  background-color: var(--color-alerta-suave);
+  border: 1px solid #fecaca;
+  border-radius: var(--radio-md);
+  padding: var(--espacio-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-2);
+}
+
+.filaSuperior {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.nombrePaciente {
   font-size: var(--texto-sm);
-  opacity: 0.9;
+  font-weight: var(--peso-bold);
+  color: var(--color-texto);
+}
+
+.tiempo {
+  font-size: var(--texto-xs);
+  color: var(--color-alerta);
+  font-weight: var(--peso-medium);
+  white-space: nowrap;
 }
 
 .mensaje {
-  font-size: var(--texto-md);
-}
-
-.acciones {
-  display: flex;
-  align-items: center;
-  gap: var(--espacio-4);
-  flex-shrink: 0;
-}
-
-.hora {
-  font-size: var(--texto-sm);
-  font-variant-numeric: tabular-nums;
-  opacity: 0.9;
-}
-
-.botonAtender {
-  min-height: 36px;
-  padding: var(--espacio-2) var(--espacio-4);
-  border: none;
-  border-radius: var(--radio-md);
-  background-color: var(--color-superficie);
+  font-size: var(--texto-xs);
   color: var(--color-alerta);
-  font-size: var(--texto-sm);
   font-weight: var(--peso-semibold);
-  white-space: nowrap;
-  transition: background-color var(--transicion-rapida);
+  line-height: var(--interlineado-corto);
 }
 
-.botonAtender:hover {
-  background-color: var(--color-alerta-suave);
+.detallesMetricas {
+  font-size: var(--texto-xs);
+  color: var(--color-texto);
+  font-weight: var(--peso-semibold);
+  border-top: 1px solid rgba(239, 68, 68, 0.2);
+  padding-top: var(--espacio-2);
+  display: flex;
+  justify-content: space-between;
 }
 
-.botonAtender:focus-visible {
-  outline: 2px solid var(--color-superficie);
-  outline-offset: 2px;
+.valorGoteo {
+  color: var(--color-alerta);
+}
+
+.textoEsperado {
+  color: var(--color-texto-secundario);
+}
+
+
+.sinAlertas {
+  text-align: center;
+  color: var(--color-texto-secundario);
+  font-size: var(--texto-sm);
+  padding: var(--espacio-4);
 }

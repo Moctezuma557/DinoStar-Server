@@ -81,6 +81,8 @@ backend/boost.json
 
 # ===== VENV =====
 simulator/venv/
+
+node_modules/
 AGENTS.md
 ENFERMERAS_API.md
 Notas_Adrian.md
