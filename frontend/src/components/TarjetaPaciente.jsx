@@ -1,4 +1,3 @@
-import React from 'react';
 import './tarjetapaciente.css';
 
 export default function TarjetaPaciente({ 
@@ -18,13 +17,16 @@ export default function TarjetaPaciente({
   nombreSolucion,
   tipoBajante
 }) {
+  const estadoSeguro = estado ?? "normal";
+  const textoEstadoSeguro = textoEstado || "GOTEO REGULAR";
+
   return (
-    <div className={`tarjeta-paciente-componente estado-${estado}`}>
-      <div className={`tarjeta-paciente-header estado-${estado}`}>
+    <div className={`tarjeta-paciente-componente estado-${estadoSeguro}`}>
+      <div className={`tarjeta-paciente-header estado-${estadoSeguro}`}>
         <div className="header-estado-info">
-          <span className="texto-estado-header">{textoEstado || "GOTEO REGULAR"}</span>
+          <span className="texto-estado-header">{textoEstadoSeguro}</span>
         </div>
-        <span className="badge-estable">{estado.toUpperCase() === 'NORMAL' ? 'ESTABLE' : estado.toUpperCase()}</span>
+        <span className="badge-estable">{estadoSeguro.toUpperCase() === 'NORMAL' ? 'ESTABLE' : estadoSeguro.toUpperCase()}</span>
       </div>
 
       <div className="tarjeta-paciente-body">
@@ -32,7 +34,7 @@ export default function TarjetaPaciente({
         <div className="paciente-info-principal">
           <div className="paciente-nombre-seccion">
             <h3>{nombre}</h3>
-            <span className="badge-edad">{edad} Años</span>
+            {edad != null && <span className="badge-edad">{edad} Años</span>}
           </div>
           <span className="paciente-detalles-secundarios">{idPaciente}</span>
         </div>
@@ -41,7 +43,6 @@ export default function TarjetaPaciente({
           <div className="solucion-info-izquierda">
             <span className="nombre-solucion">{nombreSolucion}</span>
           </div>
-          <span className="badge-bajante">{tipoBajante}</span>
         </div>
 
         {/* Ritmo de Goteo y Flujo Actual */}
@@ -62,10 +63,13 @@ export default function TarjetaPaciente({
               <span className="metrica-titulo">FLUJO ACTUAL</span>
             </div>
             <div className="metrica-valor-grupo">
-              <span className="valor-principal">{flujoActual}</span>
+              <span className="valor-principal">{flujoActual ?? "—"}</span>
               <span className="unidad-medida">ml/h</span>
             </div>
-            <span className="metrica-subtext">Meta: {metaFlujo} ml/h</span>
+            <span className="badge-bajante">{tipoBajante}</span>
+            {metaFlujo != null && (
+              <span className="metrica-subtext">Meta: {metaFlujo} ml/h</span>
+            )}
           </div>
         </div>
 
