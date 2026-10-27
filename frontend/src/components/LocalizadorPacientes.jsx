@@ -361,6 +361,54 @@ function TarjetaCama({ paciente, seleccionado, onSeleccionar, compacta }) {
   );
 }
 
+function ListaDeCamas({
+  camas,
+  cargando,
+  error,
+  mensajeVacio,
+  pacienteId,
+  onSeleccionar,
+  onReintentar,
+  compacta,
+}) {
+  let contenido;
+
+  if (cargando) {
+    contenido = (
+      <p className={styles.estadoLista}>Consultando pacientes…</p>
+    );
+  } else if (error) {
+    contenido = (
+      <div className={styles.estadoError} role="alert">
+        <Icono nombre="advertencia" tamano={18} />
+        <p>No se pudo consultar el listado de pacientes.</p>
+        {onReintentar && (
+          <button
+            type="button"
+            className={styles.botonReintentar}
+            onClick={onReintentar}
+          >
+            Reintentar
+          </button>
+        )}
+      </div>
+    );
+  } else if (camas.length === 0) {
+    contenido = <p className={styles.vacio}>{mensajeVacio}</p>;
+  } else {
+    contenido = camas.map((paciente) => (
+      <TarjetaCama
+        key={paciente.id}
+        paciente={paciente}
+        seleccionado={paciente.id === pacienteId}
+        onSeleccionar={onSeleccionar}
+        compacta={compacta}
+      />
+    ));
+  }
+
+  return <div className={styles.lista}>{contenido}</div>;
+}
 export default function LocalizadorPacientes({ onCerrar, onConfirmar }) {
   const [busquedaEnfermera, setBusquedaEnfermera] = useState("");
   const [enfermeraId, setEnfermeraId] = useState(ENFERMERAS[0].id);
