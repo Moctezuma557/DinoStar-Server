@@ -1,6 +1,18 @@
-param([string] $AppKey = 'dinostar-local')
+param([string] $AppKey = 'dinostar-local', [switch] $NuevaLectura)
 
 $ErrorActionPreference = 'Stop'
+
+if ($NuevaLectura) {
+    Push-Location (Split-Path $PSScriptRoot -Parent)
+    try {
+        Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot 'verify-nueva-lectura.php') | docker compose exec -T backend php
+        if ($LASTEXITCODE -ne 0) { throw 'Fallo la verificacion real de NuevaLectura.' }
+    } finally {
+        Pop-Location
+    }
+    return
+}
+
 $socket = [Net.WebSockets.ClientWebSocket]::new()
 $deadline = [Threading.CancellationTokenSource]::new(20000)
 

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   BrowserRouter,
   Routes,
@@ -28,6 +29,9 @@ function AppShell() {
   const { pathname } = useLocation();
   const navigate = useNavigate();
 
+  const [cantidadAlertas, setCantidadAlertas] = useState(0);
+  const [triggerAlerta, setTriggerAlerta] = useState(0);
+
   const vistaActual = navigationItems.find((item) =>
     pathname.startsWith(item.activePrefix ?? item.to)
   );
@@ -37,13 +41,16 @@ function AppShell() {
       title={vistaActual?.label ?? "DinoStar"}
       activeItem={vistaActual?.id}
       user={enfermeraDemo}
-      badges={{ alertasActivas: 2 }}
-      alertas={2}  
+      badges={{ alertasActivas: cantidadAlertas }}
+      alertas={cantidadAlertas}  
       onNavigate={(_id, to) => navigate(to)}
-      onAlertas={() => navigate("/alertas")}
+      onAlertas={() => {
+        navigate("/dashboard");
+        setTriggerAlerta((prev) => prev + 1);
+      }}
       onLogout={() => navigate("/login")}
     >
-      <Outlet />
+      <Outlet context={{ setCantidadAlertas, triggerAlerta }} />
     </DashboardLayout>
   );
 }

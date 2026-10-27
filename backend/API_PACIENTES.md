@@ -254,3 +254,93 @@ Sin `DINOSTAR_MIGRATION_TEST=1` estas pruebas se omiten por protección: un resu
 docker stop dinostar-pacientes68-test-db
 docker rm -v dinostar-pacientes68-test-db
 ```
+
+## Historial de lecturas por sesión — tarea #76
+
+`GET /api/sesiones/{id}/lecturas` consulta una sesión por su **ID de sesión**,
+no por ID de paciente ni número de cama. Funciona con sesiones `ACTIVA`,
+`PAUSADA` y `FINALIZADA`, incluso cuando el paciente está inactivo.
+Devuelve todas sus lecturas, sin paginación, ordenadas por
+`timestamp_dispositivo` ascendente y, en caso de empate, por `id` ascendente.
+
+Respuesta **200** (ejemplo):
+
+```json
+{
+  "data": [
+    {
+      "gotas_por_min": 32.5,
+      "vol_restante": "450.00",
+      "tiempo_restante_min": 830,
+      "timestamp_dispositivo": "2026-10-20T10:00:00.123000Z"
+    },
+    {
+      "gotas_por_min": 19.9,
+      "vol_restante": "45.20",
+      "tiempo_restante_min": 136,
+      "timestamp_dispositivo": "2026-10-20T10:01:00.123000Z"
+    }
+  ]
+}
+```
+
+`gotas_por_min` es numérico, `vol_restante` es texto decimal con dos posiciones
+(igual que en el detalle de pacientes), `tiempo_restante_min` es entero y
+`timestamp_dispositivo` es ISO 8601 en UTC, con microsegundos.
+Una sesión existente sin lecturas responde `200` con `{"data": []}`.
+Una sesión inexistente responde `404` con `{"message": "Sesión no encontrada."}`.
+Los IDs con formato inválido también responden `404`. Se admiten IDs negativos
+para compatibilidad con los datos de demostración existentes.
+
+### Comprobación manual en Windows o macOS
+
+1. Con el backend y PostgreSQL habituales ya iniciados, importa
+   `backend/sesiones.postman_collection.json` en Postman. La colección solo hace
+   consultas: no crea pacientes, no ejecuta seeders y no publica MQTT.
+2. Configura `base_url` (normalmente `http://localhost:8000`) y `sesion_id`.
+   Puedes obtenerlo de `data.sesion.id` en `GET /api/pacientes/{paciente_id}` o
+   mediante la consulta SQL siguiente. No reutilices IDs de otra computadora.
+3. Ejecuta las tres solicitudes en orden. Deben responder `200`, `404`, `404`,
+   con ocho comprobaciones aprobadas en total. El caso inexistente usa un ID
+   de ejemplo; confirma que no exista en tu base.
+4. Para comprobar datos reales, selecciona una sesión que tenga lecturas y
+   compara cada elemento con la segunda consulta SQL. Para el caso vacío,
+   repite la primera solicitud con una sesión cuyo conteo sea cero.
+5. Prueba también una sesión finalizada o pausada, si existe. No hace falta
+   modificar sesiones existentes ni volver a ejecutar el seeder.
+
+```sql
+SELECT s.id AS sesion_id, s.paciente_id, s.estado, COUNT(l.id) AS lecturas
+FROM public.sesiones s
+LEFT JOIN public.lecturas l ON l.sesion_id = s.id
+GROUP BY s.id, s.paciente_id, s.estado
+ORDER BY s.id;
+
+-- Sustituye 6 por el sesion_id obtenido en TU base.
+SELECT gotas_por_min, vol_restante, tiempo_restante_min, timestamp_dispositivo
+FROM public.lecturas
+WHERE sesion_id = 6
+ORDER BY timestamp_dispositivo, id;
+```
+
+Si publicas nuevos paquetes por el flujo MQTT existente, vuelve a ejecutar la
+consulta: las lecturas deben aparecer sin crear otra sesión. El endpoint no
+modifica pacientes, sesiones, lecturas ni alertas.
+
+### Pruebas automatizadas de #76
+
+`tests/Feature/SesionLecturaApiTest.php` verifica aislamiento por sesión, orden
+cronológico con microsegundos y zonas horarias, desempate estable, estados de
+sesión, paciente inactivo, lista vacía, IDs negativos, errores 404 e integración
+con `DataPacketService` sin seeder. Se ejecuta en la base aislada descrita arriba:
+
+```powershell
+# Desde backend, con la base de pruebas aislada en el puerto 55432.
+$env:DINOSTAR_MIGRATION_TEST = '1'
+php vendor/phpunit/phpunit/phpunit --filter=SesionLecturaApiTest --do-not-cache-result
+php vendor/phpunit/phpunit/phpunit --do-not-cache-result
+Remove-Item Env:DINOSTAR_MIGRATION_TEST
+```
+
+Las consultas mantienen el esquema de acceso de la API existente; esta tarea
+no incorpora autenticación ni cambia los permisos del proyecto.

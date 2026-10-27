@@ -1,0 +1,63 @@
+{
+  "info": {
+    "name": "DinoStar — Historial de lecturas (#76)",
+    "description": "Consultas de solo lectura. Configura base_url y sesion_id con una sesión existente (data.sesion.id del detalle de un paciente, no data.id). No crea pacientes ni ejecuta seeders. Los casos de orden, aislamiento, sesión vacía y estados se cubren además en SesionLecturaApiTest.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://localhost:8000" },
+    { "key": "sesion_id", "value": "" },
+    { "key": "sesion_inexistente_id", "value": "999999999999999999" }
+  ],
+  "item": [
+    {
+      "name": "01 Historial de una sesión existente",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Accept", "value": "application/json" }],
+        "url": "{{base_url}}/api/sesiones/{{sesion_id}}/lecturas"
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": { "type": "text/javascript", "exec": [
+            "if (!/^-?[0-9]{1,18}$/.test(String(pm.variables.get('sesion_id') || ''))) { throw new Error('Configura sesion_id con el ID de una sesión existente.'); }"
+          ] }
+        },
+        {
+          "listen": "test",
+          "script": { "type": "text/javascript", "exec": [
+            "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+            "pm.test('JSON con arreglo data', () => { pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json'); pm.expect(pm.response.json().data).to.be.an('array'); });",
+            "pm.test('Campos y tipos de las lecturas', () => { for (const r of pm.response.json().data) { pm.expect(r).to.have.all.keys('gotas_por_min', 'vol_restante', 'tiempo_restante_min', 'timestamp_dispositivo'); pm.expect(r.gotas_por_min).to.be.a('number'); pm.expect(r.vol_restante).to.match(/^[0-9]+[.][0-9]{2}$/); pm.expect(Number.isInteger(r.tiempo_restante_min)).to.eql(true); pm.expect(r.timestamp_dispositivo).to.match(/^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}[.][0-9]{6}Z$/); } });",
+            "pm.test('Orden cronológico ascendente', () => { const rows = pm.response.json().data; for (let i = 1; i < rows.length; i++) { pm.expect(rows[i - 1].timestamp_dispositivo <= rows[i].timestamp_dispositivo).to.eql(true); } });"
+          ] }
+        }
+      ]
+    },
+    {
+      "name": "02 Sesión inexistente",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Accept", "value": "application/json" }],
+        "url": "{{base_url}}/api/sesiones/{{sesion_inexistente_id}}/lecturas"
+      },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('HTTP 404', () => pm.response.to.have.status(404));",
+        "pm.test('Mensaje de sesión inexistente', () => pm.expect(pm.response.json().message).to.eql('Sesión no encontrada.'));"
+      ] } }]
+    },
+    {
+      "name": "03 ID con formato inválido",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Accept", "value": "application/json" }],
+        "url": "{{base_url}}/api/sesiones/abc/lecturas"
+      },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('HTTP 404, no error SQL 500', () => pm.response.to.have.status(404));",
+        "pm.test('Respuesta JSON', () => { pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json'); pm.expect(pm.response.json()).to.have.property('message'); });"
+      ] } }]
+    }
+  ]
+}

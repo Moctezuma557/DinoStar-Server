@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import TarjetaPaciente from "../components/TarjetaPaciente";
 import Icono from "../components/Icono";
-import echo from '../echo';
+import { useDashboardContext } from "../layouts/DashboardLayout";
 import "./dashboard.css";
 
 const SALAS = [
@@ -17,127 +17,19 @@ function textoBuscable(paciente) {
     .toLowerCase();
 }
 
-// Cálculo del estado de la tarjeta según las reglas de la actividad
-function calcularEstadoTarjeta(gotasPorMin, volRestante) {
-  if (gotasPorMin < 15 || gotasPorMin > 80 || volRestante < 50) {
-    return { estado: "alerta", textoEstado: "ALERTA DE INFUSIÓN" };
-  }
-  if (gotasPorMin < 20 || gotasPorMin > 60 || volRestante < 100) {
-    return { estado: "atencion", textoEstado: "ATENCIÓN REQUERIDA" };
-  }
-  return { estado: "normal", textoEstado: "GOTEO REGULAR" };
-}
-
 export default function Dashboard() {
-  // Inicializamos en vacío para cumplir con que solo aparezcan si el servidor manda datos de camas con pacientes
-  const [pacientes, setPacientes] = useState([
-    {
-      id: 1,
-      cama: "cama-01",
-      pacienteId: "cama-01",
-      nombre: "Valeria Pérez",
-      edad: 22,
-      idPaciente: "Habitación 405-A • ID: 9104",
-      gotasPorMin: 45,
-      estadoRitmo: "Constante",
-      flujoActual: 45,
-      metaFlujo: 60,
-      porcentajeVolumen: 60,
-      volRestante: 300,
-      volTotal: 500,
-      tiempoRestante: "Restan est. 2h 00m",
-      estado: "normal",
-      textoEstado: "GOTEO REGULAR",
-      nombreSolucion: "Solución Salina 0.9%",
-      tipoBajante: "MICRO (60 GTT/ML)"
-    }
-  ]);
+  // Consumimos los pacientes globales y el trigger de alerta directamente del layout
+  const { pacientes, triggerAlerta } = useDashboardContext();
 
   const [sala, setSala] = useState(SALAS[0].id);
   const [busqueda, setBusqueda] = useState("");
   const [filtro, setFiltro] = useState("todos");
 
   useEffect(() => {
-    const channel = echo.channel('pacientes');
-
-    channel.listen('.nueva.lectura', (e) => {
-
-      // Extraer la lista de paquetes del evento de Reverb
-      const rawData = e.datapacket || e.data || e;
-      const packetsList = Array.isArray(rawData) ? rawData : [rawData];
-
-      setPacientes((prevPacientes) => {
-        let updatedPacientes = [...prevPacientes];
-
-        packetsList.forEach((packet) => {
-          // El simulador manda "pacienteId" (ej: "cama-01")
-          const camaRecibida = packet.pacienteId || packet.cama;
-          if (!camaRecibida) return;
-
-          // Buscar si ya existe la tarjeta con esa cama o id
-          const index = updatedPacientes.findIndex(
-            (p) => p.cama === camaRecibida || p.pacienteId === camaRecibida || p.idPaciente?.includes(camaRecibida)
-          );
-
-          const gotas = Number(packet.gotasPorMin) || 0;
-          const volumen = Number(packet.volRestante) || 0;
-          const tiempoMinutos = Number(packet.tiempoRestante) || 0;
-
-          // Formatear el tiempo restante a horas y minutos legibles
-          const horas = Math.floor(tiempoMinutos / 60);
-          const mins = tiempoMinutos % 60;
-          const textoTiempo = `Restan est. ${horas}h ${mins}m`;
-
-          // Calcular estado usando la función auxiliar que ya definiste arriba
-          const infoEstado = calcularEstadoTarjeta(gotas, volumen);
-          const estadoCalculado = infoEstado.estado;
-          const textoEstadoCalculado = infoEstado.textoEstado;
-
-          if (index !== -1) {
-            // Actualizar la tarjeta existente con los nuevos valores del simulador
-            updatedPacientes[index] = {
-              ...updatedPacientes[index],
-              gotasPorMin: gotas,
-              flujoActual: gotas,
-              volRestante: volumen,
-              porcentajeVolumen: Math.round((volumen / 500) * 100),
-              tiempoRestante: textoTiempo,
-              estado: estadoCalculado,
-              textoEstado: textoEstadoCalculado,
-            };
-          } else {
-            // Si la tarjeta no existe, crearla dinámicamente para la cama recibida
-            updatedPacientes.push({
-              id: Date.now() + Math.random(),
-              cama: camaRecibida,
-              pacienteId: camaRecibida,
-              nombre: `Paciente Cama ${camaRecibida}`,
-              edad: 28,
-              idPaciente: `Habitación • ID: ${camaRecibida}`,
-              gotasPorMin: gotas,
-              estadoRitmo: packet.modo || "Constante",
-              flujoActual: gotas,
-              metaFlujo: 60,
-              porcentajeVolumen: Math.round((volumen / 500) * 100),
-              volRestante: volumen,
-              volTotal: 500,
-              tiempoRestante: textoTiempo,
-              estado: estadoCalculado,
-              textoEstado: textoEstadoCalculado,
-              nombreSolucion: "Solución Salina 0.9%",
-              tipoBajante: "MICRO (60 GTT/ML)"
-            });
-          }
-        });
-
-        return updatedPacientes;
-      });
-    });
-
-    return () => {
-      echo.leave('pacientes');
-    };
-  }, []);
+    if (triggerAlerta > 0) {
+      setFiltro("alertas");
+    }
+  }, [triggerAlerta]);
 
   const totalAlertas = pacientes.filter((p) => p.estado === "alerta").length;
 
@@ -178,15 +70,10 @@ export default function Dashboard() {
           />
         </div>
 
-        <div
-          className="filtro-pacientes"
-          role="group"
-          aria-label="Filtrar pacientes"
-        >
+        <div className="filtro-pacientes" role="group" aria-label="Filtrar pacientes">
           <button
             type="button"
             className={`filtro-opcion ${filtro === "todos" ? "activa" : ""}`}
-            aria-pressed={filtro === "todos"}
             onClick={() => setFiltro("todos")}
           >
             Todos los Pacientes
@@ -194,13 +81,10 @@ export default function Dashboard() {
           <button
             type="button"
             className={`filtro-opcion ${filtro === "alertas" ? "activa" : ""}`}
-            aria-pressed={filtro === "alertas"}
             onClick={() => setFiltro("alertas")}
           >
             Solo Alertas
-            {totalAlertas > 0 && (
-              <span className="filtro-badge">{totalAlertas}</span>
-            )}
+            {totalAlertas > 0 && <span className="filtro-badge">{totalAlertas}</span>}
           </button>
         </div>
 
@@ -213,11 +97,7 @@ export default function Dashboard() {
       <div className="seccion-contenido-dashboard">
         {pacientesVisibles.length === 0 ? (
           <div className="estado-vacio-dashboard">
-            <h3>
-              {pacientes.length === 0
-                ? "Sin pacientes asignados"
-                : "Ningún paciente coincide con la búsqueda"}
-            </h3>
+            <h3>Ningún paciente coincide con los filtros actuales</h3>
           </div>
         ) : (
           <div className="grid-tarjetas-pacientes">
