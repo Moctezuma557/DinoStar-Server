@@ -9,7 +9,6 @@ function calcularIniciales(nombre) {
     .join("")
     .toUpperCase();
 }
-
 function formatearTurno(turno) {
   if (!turno) return "Sin turno";
   return turno.charAt(0) + turno.slice(1).toLowerCase();
@@ -36,4 +35,16 @@ export async function obtenerEnfermeras({ nombre, signal } = {}) {
 
   const lista = Array.isArray(respuesta) ? respuesta : (respuesta?.data ?? []);
   return lista.map(adaptarEnfermera);
+}
+
+/**
+ * @param {string|number} id
+ * @param {AbortSignal} signal
+ */
+export async function obtenerEnfermera({ id, signal } = {}) {
+  const respuesta = await pedirJson(`/api/enfermeras/${id}`, { signal });
+  const crudo = respuesta?.data ?? respuesta;
+
+  if (!crudo) return null;
+  return adaptarEnfermera(crudo);
 }
