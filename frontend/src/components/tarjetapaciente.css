@@ -253,12 +253,16 @@
   color: var(--color-secundario);
 }
 
+
 .badge-bajante {
-  background-color: var(--color-primario-suave);
-  color: var(--color-primario, #1d4ed8);
+  background-color: var(--color-normal-suave);
+  color: var(--color-normal);
   font-size: 10px;
   font-weight: var(--peso-bold);
   padding: 4px 10px;
   border-radius: var(--radio-pildora);
   letter-spacing: 0.3px;
+  display: inline-block;
+  width: fit-content;
+  margin-top: 2px;
 }

@@ -5,6 +5,7 @@ import styles from "./DashboardLayout.module.css";
 import logoDinoStar from "../assets/Logo.png";
 import AlertaBanner from "../components/AlertaBanner";
 import echo from "../echo";
+import { getPacientes } from "../api/pacientes";
 
 const DashboardContext = createContext();
 export const useDashboardContext = () => useContext(DashboardContext);
@@ -42,22 +43,141 @@ function RelojSesion() {
   );
 }
 
-function determinarTipoAlerta(gotasPorMin, volRestante) {
-  if (volRestante <= 50) return "FIN_BOLSA";
-  if (gotasPorMin < 15) return "GOTEO_LENTO";
-  if (gotasPorMin > 80) return "GOTEO_RAPIDO";
-  return null;
+const FACTOR_GOTEO = {
+  NORMAL_GOTEO: 20,
+  MICRO_GOTEO: 60,
+};
+
+function normalizarCama(valor) {
+  return String(valor ?? "").trim().toLowerCase();
+}
+
+function factorGoteo(modo) {
+  return FACTOR_GOTEO[modo] ?? FACTOR_GOTEO.NORMAL_GOTEO;
+}
+
+function calcularFlujoMlH(gotasPorMin, modo) {
+  return (gotasPorMin * 60) / factorGoteo(modo);
+}
+
+function formatearTiempoRestante(minutos) {
+  const total = Math.max(0, Number(minutos) || 0);
+  const horas = Math.floor(total / 60);
+  const mins = total % 60;
+  return `Restan est. ${horas}h ${mins}m`;
+}
+
+function formatearHora(timestamp) {
+  const milisegundos = Number(timestamp);
+  const fecha =
+    Number.isFinite(milisegundos) && milisegundos > 0
+      ? new Date(milisegundos)
+      : new Date();
+
+  return fecha.toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+}
+
+function calcularPorcentaje(volRestante, volTotal) {
+  if (!Number.isFinite(volTotal) || volTotal <= 0) return 0;
+
+  const porcentaje = Math.round((volRestante / volTotal) * 100);
+  return Math.min(100, Math.max(0, porcentaje));
 }
 
 function calcularEstadoTarjeta(gotasPorMin, volRestante) {
-  const tipoAlerta = determinarTipoAlerta(gotasPorMin, volRestante);
-  if (tipoAlerta) {
-    return { estado: "alerta", textoEstado: "ALERTA DE INFUSIÓN", tipoAlerta };
+  if (volRestante < 50) {
+    return {
+      estado: "alerta",
+      textoEstado: "ALERTA DE INFUSIÓN",
+      tipoAlerta: "FIN_BOLSA",
+    };
   }
-  if (gotasPorMin < 20 || gotasPorMin > 60 || volRestante < 100) {
+  if (gotasPorMin < 20) {
+    return {
+      estado: "alerta",
+      textoEstado: "ALERTA DE INFUSIÓN",
+      tipoAlerta: "GOTEO_LENTO",
+    };
+  }
+  if (gotasPorMin > 60) {
+    return {
+      estado: "alerta",
+      textoEstado: "ALERTA DE INFUSIÓN",
+      tipoAlerta: "GOTEO_RAPIDO",
+    };
+  }
+  if (volRestante < 100) {
     return { estado: "atencion", textoEstado: "ATENCIÓN REQUERIDA", tipoAlerta: null };
   }
+
   return { estado: "normal", textoEstado: "GOTEO REGULAR", tipoAlerta: null };
+}
+
+function crearPacienteDesdePaquete(pacienteDb, packet) {
+  const gotasPorMin = Number(packet.gotasPorMin) || 0;
+  const volRestante = Number(packet.volRestante) || 0;
+  const tiempoRestante = Number(packet.tiempoRestante) || 0;
+  const volTotal = Number(pacienteDb.vol_total) || 0;
+  const modoGoteo = packet.modo ?? pacienteDb.modo_goteo;
+  const infoEstado = calcularEstadoTarjeta(gotasPorMin, volRestante);
+
+  return {
+    id: pacienteDb.id,
+    cama: pacienteDb.numero_cama,
+    pacienteId: pacienteDb.numero_cama,
+    nombre: pacienteDb.nombre,
+    sala: pacienteDb.sala,
+    idPaciente: `${pacienteDb.sala} • ID: ${pacienteDb.id}`,
+    enfermeraId: pacienteDb.enfermera_id,
+    gotasPorMin,
+    flujoActual: Math.round(calcularFlujoMlH(gotasPorMin, modoGoteo) * 10) / 10,
+    estadoRitmo: modoGoteo === "MICRO_GOTEO" ? "Microgoteo" : "Macrogoteo",
+    metaFlujo: null,
+    porcentajeVolumen: calcularPorcentaje(volRestante, volTotal),
+    volRestante,
+    volTotal,
+    tiempoRestante: formatearTiempoRestante(tiempoRestante),
+    estado: infoEstado.estado,
+    textoEstado: infoEstado.textoEstado,
+    nombreSolucion: pacienteDb.tipo_solucion || "Solución sin registrar",
+    tipoBajante:
+      modoGoteo === "MICRO_GOTEO" ? "MICRO (60 GTT/ML)" : "NORMAL (20 GTT/ML)",
+    modoGoteo,
+    tipoAlerta: infoEstado.tipoAlerta,
+    horaAlerta: infoEstado.tipoAlerta ? formatearHora(packet.timestamp) : null,
+  };
+}
+
+function actualizarPacienteConPaquete(paciente, packet) {
+  const gotasPorMin = Number(packet.gotasPorMin) || 0;
+  const volRestante = Number(packet.volRestante) || 0;
+  const tiempoRestante = Number(packet.tiempoRestante) || 0;
+  const volTotal = Number(paciente.volTotal) || 0;
+  const modoGoteo = packet.modo ?? paciente.modoGoteo;
+  const infoEstado = calcularEstadoTarjeta(gotasPorMin, volRestante);
+
+  return {
+    ...paciente,
+    gotasPorMin,
+    flujoActual: Math.round(calcularFlujoMlH(gotasPorMin, modoGoteo) * 10) / 10,
+    estadoRitmo: modoGoteo === "MICRO_GOTEO" ? "Microgoteo" : "Macrogoteo",
+    modoGoteo,
+    tipoBajante:
+      modoGoteo === "MICRO_GOTEO" ? "MICRO (60 GTT/ML)" : "NORMAL (20 GTT/ML)",
+    porcentajeVolumen: calcularPorcentaje(volRestante, volTotal),
+    volRestante,
+    tiempoRestante: formatearTiempoRestante(tiempoRestante),
+    estado: infoEstado.estado,
+    textoEstado: infoEstado.textoEstado,
+    tipoAlerta: infoEstado.tipoAlerta,
+    horaAlerta: infoEstado.tipoAlerta
+      ? formatearHora(packet.timestamp)
+      : paciente.horaAlerta,
+  };
 }
 
 export default function DashboardLayout({
@@ -85,31 +205,18 @@ export default function DashboardLayout({
       .map((parte) => parte[0])
       .join("");
 
-  const [pacientes, setPacientes] = useState([
-    {
-      id: 1,
-      cama: "cama-01",
-      pacienteId: "cama-01",
-      nombre: "Valeria Pérez",
-      edad: 22,
-      idPaciente: "Habitación 405-A • ID: 9104",
-      gotasPorMin: 45,
-      estadoRitmo: "Constante",
-      flujoActual: 45,
-      metaFlujo: 60,
-      porcentajeVolumen: 60,
-      volRestante: 300,
-      volTotal: 500,
-      tiempoRestante: "Restan est. 2h 00m",
-      estado: "normal",
-      textoEstado: "GOTEO REGULAR",
-      nombreSolucion: "Solución Salina 0.9%",
-      tipoBajante: "MICRO (60 GTT/ML)",
-    },
-  ]);
-
+  // Estado global de pacientes
+  const [pacientes, setPacientes] = useState([]);
+  const [wsConectado, setWsConectado] = useState(() => {
+    const conexion = echo.connector?.pusher?.connection;
+    return conexion ? conexion.state === "connected" : true;
+  });
   const [mostrarBanner, setMostrarBanner] = useState(false);
   const [triggerAlerta, setTriggerAlerta] = useState(0);
+
+  const catalogoRef = useRef([]);
+  const catalogoListoRef = useRef(false);
+  const pendientesRef = useRef([]);
 
   const alertasActivas = pacientes.filter((p) => p.estado === "alerta");
   const cantidadAlertas = alertasActivas.length;
@@ -118,84 +225,115 @@ export default function DashboardLayout({
   const prevCantidadRef = useRef(cantidadAlertas);
   useEffect(() => {
     if (cantidadAlertas > 0 && cantidadAlertas > prevCantidadRef.current) {
-      setMostrarBanner(true); // <--- Se abre solo al recibir una nueva alerta
+      setMostrarBanner(true);
     }
     prevCantidadRef.current = cantidadAlertas;
   }, [cantidadAlertas]);
 
-  // Escucha del WebSocket
-  useEffect(() => {
-    const channel = echo.channel("pacientes");
 
-    channel.listen(".nueva.lectura", (e) => {
+  useEffect(() => {
+    let activo = true;
+    catalogoListoRef.current = false;
+
+    const procesarPaquete = (packet) => {
+      if (!packet || typeof packet !== "object") return;
+
+      const camaRecibida = normalizarCama(packet.pacienteId ?? packet.cama);
+      if (!camaRecibida) return;
+
+      const pacienteEnDb = catalogoRef.current.find(
+        (paciente) => normalizarCama(paciente.numero_cama) === camaRecibida
+      );
+
+      // Solo se crean tarjetas para camas registradas en la BD.
+      if (!pacienteEnDb) return;
+
+      setPacientes((prevPacientes) => {
+        const indice = prevPacientes.findIndex(
+          (paciente) => normalizarCama(paciente.cama) === camaRecibida
+        );
+
+        if (indice === -1) {
+          return [
+            ...prevPacientes,
+            crearPacienteDesdePaquete(pacienteEnDb, packet),
+          ];
+        }
+
+        const actualizados = [...prevPacientes];
+        actualizados[indice] = actualizarPacienteConPaquete(
+          actualizados[indice],
+          packet
+        );
+        return actualizados;
+      });
+    };
+
+    async function cargarCatalogoPacientes() {
+      try {
+        const pacientesDb = await getPacientes();
+        if (!activo) return;
+
+        catalogoRef.current = Array.isArray(pacientesDb) ? pacientesDb : [];
+        catalogoListoRef.current = true;
+
+        // Procesar paquetes que llegaron mientras se cargaba el catálogo.
+        const pendientes = pendientesRef.current;
+        pendientesRef.current = [];
+        pendientes.forEach(procesarPaquete);
+      } catch (error) {
+        if (!activo) return;
+
+        // Sin catálogo no se puede validar la cama; se descartan los paquetes
+        // para no acumularlos indefinidamente.
+        catalogoRef.current = [];
+        catalogoListoRef.current = true;
+        pendientesRef.current = [];
+        console.error("Error al cargar el catálogo de pacientes:", error);
+      }
+    }
+
+    cargarCatalogoPacientes();
+
+    // Configuración y monitoreo de conexión de Laravel Reverb (WebSocket)
+    const pusher = echo.connector?.pusher;
+    const alConectar = () => setWsConectado(true);
+    const alDesconectar = () => setWsConectado(false);
+    const alConectando = () => setWsConectado(false);
+
+    if (pusher) {
+      pusher.connection.bind("connected", alConectar);
+      pusher.connection.bind("disconnected", alDesconectar);
+      pusher.connection.bind("connecting", alConectando);
+    }
+
+    // Las tarjetas nacen con el primer paquete de una cama registrada en la BD.
+    const channel = echo.channel("pacientes");
+    const alRecibirLectura = (e) => {
       const rawData = e.datapacket || e.data || e;
       const packetsList = Array.isArray(rawData) ? rawData : [rawData];
 
-      setPacientes((prevPacientes) => {
-        let updatedPacientes = [...prevPacientes];
-
-        packetsList.forEach((packet) => {
-          const camaRecibida = packet.pacienteId || packet.cama;
-          if (!camaRecibida) return;
-
-          const index = updatedPacientes.findIndex(
-            (p) => p.cama === camaRecibida || p.pacienteId === camaRecibida
-          );
-
-          const gotas = Number(packet.gotasPorMin) || 0;
-          const volumen = Number(packet.volRestante) || 0;
-          const tiempoMinutos = Number(packet.tiempoRestante) || 0;
-          const horas = Math.floor(tiempoMinutos / 60);
-          const mins = tiempoMinutos % 60;
-          const textoTiempo = `Restan est. ${horas}h ${mins}m`;
-
-          const infoEstado = calcularEstadoTarjeta(gotas, volumen);
-          const horaActual = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
-
-          if (index !== -1) {
-            updatedPacientes[index] = {
-              ...updatedPacientes[index],
-              gotasPorMin: gotas,
-              volRestante: volumen,
-              porcentajeVolumen: Math.round((volumen / 500) * 100),
-              tiempoRestante: textoTiempo,
-              estado: infoEstado.estado,
-              textoEstado: infoEstado.textoEstado,
-              tipoAlerta: infoEstado.tipoAlerta,
-              horaAlerta: infoEstado.tipoAlerta ? horaActual : updatedPacientes[index].horaAlerta,
-            };
-          } else {
-            updatedPacientes.push({
-              id: Date.now() + Math.random(),
-              cama: camaRecibida,
-              pacienteId: camaRecibida,
-              nombre: `Paciente Cama ${camaRecibida}`,
-              edad: 28,
-              idPaciente: `Habitación • ID: ${camaRecibida}`,
-              gotasPorMin: gotas,
-              estadoRitmo: packet.modo || "Constante",
-              flujoActual: gotas,
-              metaFlujo: 60,
-              porcentajeVolumen: Math.round((volumen / 500) * 100),
-              volRestante: volumen,
-              volTotal: 500,
-              tiempoRestante: textoTiempo,
-              estado: infoEstado.estado,
-              textoEstado: infoEstado.textoEstado,
-              nombreSolucion: "Solución Salina 0.9%",
-              tipoBajante: "MICRO (60 GTT/ML)",
-              tipoAlerta: infoEstado.tipoAlerta,
-              horaAlerta: infoEstado.tipoAlerta ? horaActual : null,
-            });
-          }
-        });
-
-        return updatedPacientes;
+      packetsList.forEach((packet) => {
+        if (!catalogoListoRef.current) {
+          pendientesRef.current.push(packet);
+          return;
+        }
+        procesarPaquete(packet);
       });
-    });
+    };
+
+    channel.listen(".nueva.lectura", alRecibirLectura);
 
     return () => {
+      activo = false;
+      channel.stopListening(".nueva.lectura", alRecibirLectura);
       echo.leave("pacientes");
+
+      if (pusher) {
+        pusher.connection.unbind("connected", alConectar);
+        pusher.connection.unbind("disconnected", alDesconectar);
+        pusher.connection.unbind("connecting", alConectando);
+      }
     };
   }, []);
 
@@ -214,9 +352,8 @@ export default function DashboardLayout({
                 <li key={id}>
                   <button
                     type="button"
-                    className={`${styles.navLink} ${
-                      isActive ? styles.navLinkActive : ""
-                    }`}
+                    className={`${styles.navLink} ${isActive ? styles.navLinkActive : ""
+                      }`}
                     aria-current={isActive ? "page" : undefined}
                     onClick={() => onNavigate?.(id, to)}
                   >
@@ -245,24 +382,46 @@ export default function DashboardLayout({
             <Icono nombre="sincronizar" tamano={14} />
             Sincronización: {sincronizacion}
           </span>
+
+          {/* Indicador visual de conexión WebSocket en la parte superior */}
+          <span
+            className={`${styles.chip} ${wsConectado ? styles.chipWsConectado : styles.chipWsCaido}`}
+            style={{
+              backgroundColor: wsConectado ? '#d1fae5' : '#fee2e2',
+              color: wsConectado ? '#065f46' : '#991b1b',
+              border: `1px solid ${wsConectado ? '#10b981' : '#ef4444'}`,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}
+          >
+            <span style={{
+              width: '8px',
+              height: '8px',
+              borderRadius: '50%',
+              backgroundColor: wsConectado ? '#10b981' : '#ef4444',
+              display: 'inline-block'
+            }}></span>
+            WebSocket: {wsConectado ? "Conectado" : "Desconectado"}
+          </span>
         </div>
 
         <div className={styles.headerDerecha}>
           <button
-  type="button"
-  className={styles.campana}
-  onClick={() => {
-    setMostrarBanner(false);                     // Nos aseguramos de que el banner no se abra
-    setTriggerAlerta((prev) => prev + 1);        // Disparamos la señal para que el Dashboard seleccione "Solo Alertas"
-    onNavigate?.("panel", "/dashboard");         // Redirigimos al Panel Principal / Dashboard
-  }}
-  aria-label={`Alertas activas: ${cantidadAlertas}`}
->
-  <Icono nombre="campana" tamano={20} />
-  {cantidadAlertas > 0 && (
-    <span className={styles.campanaBadge}>{cantidadAlertas}</span>
-  )}
-</button>
+            type="button"
+            className={styles.campana}
+            onClick={() => {
+              setMostrarBanner(false);
+              setTriggerAlerta((prev) => prev + 1);
+              onNavigate?.("panel", "/dashboard");
+            }}
+            aria-label={`Alertas activas: ${cantidadAlertas}`}
+          >
+            <Icono nombre="campana" tamano={20} />
+            {cantidadAlertas > 0 && (
+              <span className={styles.campanaBadge}>{cantidadAlertas}</span>
+            )}
+          </button>
 
           <RelojSesion />
 
