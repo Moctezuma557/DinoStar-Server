@@ -422,3 +422,15 @@ body {
   font-size: 0.8125rem;
   color: #94a3b8;
 }
+
+/* Aviso de lectura incoherente */
+.aviso-lectura-inconsistente {
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  border: 1px solid #fcd34d;
+  border-radius: 9px;
+  background: #fffbeb;
+  font-size: 0.75rem;
+  line-height: 1.45;
+  color: #92400e;
+}
