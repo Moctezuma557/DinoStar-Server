@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Paciente;
 use App\Models\Sesion;
 use App\Models\User;
+use App\Models\LogDispositivo; // Importamos el modelo de logs de dispositivos
 use App\Events\NuevaLectura;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
@@ -25,12 +26,10 @@ class DataPacketService
             $packets = json_decode($message, false, 512, JSON_THROW_ON_ERROR);
         } catch (JsonException) {
             Log::warning('[MqttListen] JSON inválido; mensaje descartado.', ['topic' => $topic]);
-
             return;
         }
         if (! is_array($packets)) {
             Log::warning('[MqttListen] Se esperaba una lista de DataPackets.', ['topic' => $topic]);
-
             return;
         }
         Log::info('[MqttListen] Lote recibido.', ['topic' => $topic, 'paquetes' => count($packets)]);
@@ -38,7 +37,6 @@ class DataPacketService
             $context = ['topic' => $topic, 'indice' => $index];
             if (! $packet instanceof stdClass) {
                 Log::warning('[MqttListen] DataPacket inválido; se esperaba un objeto.', $context);
-
                 continue;
             }
             try {
@@ -90,8 +88,16 @@ class DataPacketService
             $patients = Paciente::query()->where('numero_cama', $data['pacienteId'])
                 ->where('activo', true)->lockForUpdate()->get();
             
+            // 1. Cama ambigua
             if ($patients->count() > 1) {
                 Log::warning('[DataPacketService] Cama ambigua; no se guardaron datos.', ['pacienteId' => $data['pacienteId']]);
+
+                LogDispositivo::create([
+                    'tipo' => 'advertencia',
+                    'categoria' => 'sesion',
+                    'mensaje' => "Cama ambigua detectada para el número de cama: {$data['pacienteId']} (múltiples pacientes activos).",
+                    'numero_cama' => $data['pacienteId'],
+                ]);
 
                 return null;
             }
@@ -99,14 +105,24 @@ class DataPacketService
             $session = $patients->isEmpty() ? null : Sesion::query()
                 ->where('paciente_id', $patients->first()->id)->where('estado', 'ACTIVA')->lockForUpdate()->first();
             
+            // 2. Sesión inexistente
             if ($session === null) {
                 Log::warning('[DataPacketService] No hay sesión activa para: '.$data['pacienteId']);
+
+                $paciente = $patients->isEmpty() ? null : $patients->first();
+
+                LogDispositivo::create([
+                    'tipo' => 'advertencia',
+                    'categoria' => 'sesion',
+                    'mensaje' => "No hay sesión activa para la cama {$data['pacienteId']}.",
+                    'paciente_id' => $paciente?->id,
+                    'numero_cama' => $data['pacienteId'],
+                ]);
 
                 return null;
             }
 
-            // MODIFICACIÓN: Si el modo del paquete no coincide con la sesión, 
-            // en lugar de rechazarlo, actualizamos la sesión de forma flexible para aceptarlo.
+            // 3. Modo incompatible (ajustado automáticamente)
             if ($session->modo_goteo !== $data['modo']) {
                 Log::info('[DataPacketService] Ajustando modo de sesión activo al recibido por el dispositivo.', [
                     'sesion_id' => $session->id,
@@ -115,6 +131,15 @@ class DataPacketService
                 ]);
                 
                 $session->update(['modo_goteo' => $data['modo']]);
+
+                LogDispositivo::create([
+                    'tipo' => 'info',
+                    'categoria' => 'sistema',
+                    'mensaje' => "Modo de sesión ajustado automáticamente de {$session->modo_goteo} a {$data['modo']} por incompatibilidad con el dispositivo.",
+                    'paciente_id' => $session->paciente_id,
+                    'numero_cama' => $data['pacienteId'],
+                    'sesion_id' => $session->id,
+                ]);
             }
 
             $reading = $session->lecturas()->create([
@@ -134,8 +159,19 @@ class DataPacketService
             if ($data['gotasPorMin'] > 60) {
                 $alerts['GOTEO_RAPIDO'] = 'Goteo rápido detectado: '.$data['gotasPorMin'].' gotas/min';
             }
+
+            // 4. Generación de alertas
             foreach ($alerts as $type => $message) {
                 $session->alertas()->create(['tipo' => $type, 'mensaje' => $message, 'resuelta' => false]);
+
+                LogDispositivo::create([
+                    'tipo' => 'alerta',
+                    'categoria' => 'alerta',
+                    'mensaje' => $message,
+                    'paciente_id' => $session->paciente_id,
+                    'numero_cama' => $data['pacienteId'],
+                    'sesion_id' => $session->id,
+                ]);
             }
 
             return ['lectura_id' => $reading->id, 'sesion_id' => $session->id, 'alertas' => array_keys($alerts)];
@@ -145,7 +181,6 @@ class DataPacketService
             DB::afterCommit(function () use ($data, $result): void {
                 Log::info('[DataPacketService] Lectura guardada para '.$data['pacienteId'].' - '.$data['gotasPorMin'].' gotas/min');
 
-                // Disparar el evento de broadcast por Reverb de forma segura tras el commit
                 broadcast(new NuevaLectura(
                     pacienteId: $data['pacienteId'],
                     gotasPorMin: $data['gotasPorMin'],
