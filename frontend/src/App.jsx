@@ -16,6 +16,7 @@ import Login from "./pages/login";
 import Dashboard from "./pages/dashboard";
 import Paciente from "./pages/paciente";
 import Pacientes from "./pages/pacientes";
+import Dispositivos from "./pages/dispositivos"; 
 
 // Datos temporales hasta que exista la autenticación real.
 const enfermeraDemo = {
@@ -64,16 +65,19 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {}
         <Route path="/login" element={<Login />} />
 
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
 
-        {/* Dentro del layout */}
+        {/* Dentro del layout principal */}
         <Route element={<AppShell />}>
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/pacientes" element={<Pacientes />} />
           <Route path="/paciente/:id" element={<Paciente />} />
+          
+          {/* NUEVA RUTA DE DISPOSITIVOS Y LOGS */}
+          <Route path="/dispositivos" element={<Dispositivos />} />
+
           <Route path="*" element={<VistaEnConstruccion />} />
         </Route>
       </Routes>

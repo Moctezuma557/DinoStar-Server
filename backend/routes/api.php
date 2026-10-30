@@ -18,5 +18,7 @@ Route::get('/enfermeras', [EnfermeraController::class, 'index'])->name('enfermer
 Route::get('/enfermeras/{id}', [EnfermeraController::class, 'show'])->name('enfermeras.show');
 Route::post('/enfermeras', [EnfermeraController::class, 'store'])->name('enfermeras.store');
 
-Route::middleware('auth:sanctum')->get('/dispositivos/logs', [LogDispositivoController::class, 'index'])
-    ->name('dispositivos.logs.index');
+//Route::middleware(['auth:sanctum', 'admin'])->group(function () {
+    Route::get('/dispositivos/logs', [LogDispositivoController::class, 'index']);
+  //      ->name('dispositivos.logs.index');
+//});
