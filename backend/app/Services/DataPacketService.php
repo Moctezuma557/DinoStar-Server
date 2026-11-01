@@ -164,14 +164,7 @@ class DataPacketService
             foreach ($alerts as $type => $message) {
                 $session->alertas()->create(['tipo' => $type, 'mensaje' => $message, 'resuelta' => false]);
 
-                LogDispositivo::create([
-                    'tipo' => 'alerta',
-                    'categoria' => 'alerta',
-                    'mensaje' => $message,
-                    'paciente_id' => $session->paciente_id,
-                    'numero_cama' => $data['pacienteId'],
-                    'sesion_id' => $session->id,
-                ]);
+                
             }
 
             return ['lectura_id' => $reading->id, 'sesion_id' => $session->id, 'alertas' => array_keys($alerts)];
