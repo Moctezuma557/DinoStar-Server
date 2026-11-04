@@ -181,6 +181,21 @@
   text-align: center;
 }
 
+.pulsando {
+  animation: pulso 1.5s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pulsando {
+    animation: none;
+  }
+}
+
+@keyframes pulso {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.7; transform: scale(1.1); }
+}
+
 .reloj {
   display: flex;
   align-items: center;
