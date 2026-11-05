@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AlertaController;
 use App\Http\Controllers\EnfermeraController;
 use App\Http\Controllers\LogDispositivoController;
 use App\Http\Controllers\PacienteController;
@@ -29,3 +30,7 @@ Route::patch('/sesiones/{id}', [SesionController::class, 'update'])
     ->where('id', '[0-9]{1,18}')->name('sesiones.update');
 Route::post('/sesiones/{id}/finalizar', [SesionController::class, 'finalizar'])
     ->where('id', '[0-9]{1,18}')->name('sesiones.finalizar');
+
+Route::get('/alertas', [AlertaController::class, 'index'])->name('alertas.index');
+Route::patch('/alertas/{id}', [AlertaController::class, 'update'])
+    ->where('id', '[0-9]{1,18}')->name('alertas.update');
