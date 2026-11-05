@@ -1,4 +1,4 @@
-# API de pacientes — tarea #68
+# API de pacientes
 
 Esta entrega agrega registro, listado y detalle sobre los modelos y migraciones existentes. No modifica el simulador, los seeders ni DataPacketService. `tipo_solucion` ya pertenece al `$fillable` de Sesion y a su migración anterior.
 
@@ -116,11 +116,77 @@ Responde **200** con `data` y estas propiedades:
 
 Solo incluye lecturas de esa sesión activa, ordenadas por timestamp del dispositivo y luego ID. No mezcla sesiones anteriores. Sesiones antiguas pueden tener `tipo_solucion: null`. Los decimales de volumen se serializan como texto (`"500.00"`) para conservar precisión; las fechas se devuelven en ISO 8601 UTC. Las alertas conservan su flujo actual en la BD y no forman parte de este endpoint.
 
+### PATCH /api/pacientes/{id} — editar (#99)
+
+Enviar JSON con uno o más campos: `nombre` (máximo 150 caracteres),
+`numero_cama` (20) y `sala` (50). Ejemplo: `{"nombre":"Ana Pérez","sala":"Sala B"}`.
+Los campos omitidos se conservan; un campo editable presente no admite null ni
+texto en blanco. Campos adicionales se ignoran; si no hay ninguno editable,
+responde **422**. No permite cambiar `activo`, IDs ni datos de la sesión.
+
+Responde **200** con el paciente editado, incluso si no tiene sesión:
+
+```json
+{"data":{"id":123,"nombre":"Ana Pérez","numero_cama":"api-01","sala":"Sala B","activo":true}}
+```
+
+La cama se comprueba con la misma regla y bloqueo por número que POST:
+no distingue mayúsculas, es global entre salas y excluye al propio paciente.
+Una cama reservada por otro paciente activo o por otra sesión en curso da
+**409**, sin aplicar ninguno de los cambios. Al cambiar de cama, los nuevos
+paquetes del dispositivo deben usar ese número; el historial conserva sus IDs.
+
+### DELETE /api/pacientes/{id} — baja lógica (#99)
+
+| Situación | Respuesta y efecto |
+| --- | --- |
+| Sin sesión en curso | **204**, sin cuerpo. Marca al paciente como inactivo. |
+| Sesión `ACTIVA` o `PAUSADA`, sin confirmación o con `false` | **409**. No modifica al paciente ni a la sesión. |
+| Sesión en curso con JSON `{"finalizar_sesion":true}` | **204**. Cambia esa sesión a `FINALIZADA`, guarda `fin` con la hora del servidor y marca al paciente como inactivo en la misma transacción. |
+| Confirmación inválida, por ejemplo `"true"`, `1` o `null` | **422**. El campo, si se envía, debe ser booleano JSON. |
+| Paciente inexistente o ya inactivo | **404** con una solicitud válida, también al repetir la baja o intentar editarlo. |
+
+La baja no borra filas ni resuelve alertas. El paciente deja de aparecer en
+`GET /api/pacientes`; el historial de cada sesión sigue disponible en
+`GET /api/sesiones/{id}/lecturas`. No se necesita cambiar el esquema.
+
+**Comprobación en Postman (Windows/macOS/Linux):** usar exclusivamente un
+paciente ficticio creado para esta prueba con el POST anterior. Guardar
+`data.id` como `paciente_id` y `data.sesion.id` como `sesion_id`. Enviar
+`Accept: application/json` y usar Body → raw → JSON cuando corresponda.
+
+1. `PATCH {{base_url}}/api/pacientes/{{paciente_id}}` con `{"sala":"Sala B"}`:
+   **200**, solo cambia la sala. Con la cama de otro paciente activo: **409**.
+2. `DELETE {{base_url}}/api/pacientes/{{paciente_id}}` sin cuerpo: **409**
+   porque el POST abrió una sesión. El detalle aún muestra la misma sesión.
+3. Repetir DELETE con `{"finalizar_sesion":true}`: **204**, sin cuerpo.
+4. En el listado activo ya no está su ID. El historial del `sesion_id` anterior
+   devuelve **200** con sus lecturas (o `data: []` si no había ninguna).
+
+Para repetir las 14 peticiones con comprobaciones automáticas, importar
+[`pacientes-b1.postman_collection.json`](pacientes-b1.postman_collection.json)
+en Postman y seleccionar **No Environment**. En la base local, comprobar que
+la enfermera de la petición 01 (`-35001`) está activa y que la cama de la 05
+(`CAMA-01`) está ocupada. Si difieren, ajustar esos cuerpos antes de empezar.
+Enviar **01** una sola vez. La colección guarda los IDs devueltos.
+
+Desde la raíz del repositorio, sustituir `CAMA_DEL_POST` por el valor exacto
+de `data.numero_cama` y ejecutar una sola vez en PowerShell, Bash o zsh:
+
+```text
+docker compose exec -T -e XDG_CONFIG_HOME=/tmp -e CAMA_B1=CAMA_DEL_POST backend php artisan tinker --execute="app(\App\Services\DataPacketService::class)->procesar(['pacienteId'=>getenv('CAMA_B1'),'gotasPorMin'=>19.9,'volRestante'=>45.2,'tiempoRestante'=>136,'modo'=>'MICRO_GOTEO','timestamp'=>now()->getTimestampMs()]);"
+```
+
+Enviar **02 a 14** en orden. La **03** debe devolver una lectura antes de
+continuar. La **11** confirma la baja de ese paciente ficticio y la **14**
+compara el historial con el de la **03**.
+
 ### Errores
 
 | HTTP | Causa | Respuesta |
 | --- | --- | --- |
-| 404 | Paciente inexistente, inactivo o sin sesión activa | `{"message":"Paciente no encontrado o sin sesión activa."}` |
+| 404 | GET de detalle: paciente inexistente, inactivo o sin sesión activa | `{"message":"Paciente no encontrado o sin sesión activa."}` |
+| 404 | PATCH/DELETE: paciente inexistente o inactivo | `{"message":"Paciente no encontrado o inactivo."}` |
 | 409 | Cama reservada | `{"message":"La cama ya está ocupada por un paciente activo o una sesión en curso."}` |
 | 422 | Validación de campos/filtros | `message` y `errors`, con arreglos de mensajes por campo |
 

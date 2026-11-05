@@ -50,7 +50,7 @@ class PacienteApiTest extends TestCase
 
     private function patient(array $changes = [], array $session = []): Paciente
     {
-        $patient = Paciente::create(array_replace([
+        $patient = Paciente::query()->forceCreate(array_replace([
             'nombre' => 'Paciente API', 'numero_cama' => 'cama-01', 'sala' => 'Sala A', 'activo' => true,
         ], $changes));
         $patient->sesiones()->create(array_replace([
@@ -314,5 +314,119 @@ class PacienteApiTest extends TestCase
             $this->assertDatabaseHas('sesiones', ['id' => $id, 'estado' => 'ACTIVA', 'tipo_solucion' => 'Salina']);
             $this->assertDatabaseHas('lecturas', ['sesion_id' => $id, 'gotas_por_min' => 32.5]);
         }
+    }
+
+    public function test_partial_update_preserves_readings_alerts_and_session(): void
+    {
+        $patient = $this->patient(['id' => -35001]);
+        $session = $patient->sesionActiva;
+        $reading = $session->lecturas()->create(['gotas_por_min' => 19.9, 'vol_restante' => 100,
+            'tiempo_restante_min' => 60, 'timestamp_dispositivo' => now()]);
+        $alert = $session->alertas()->create(['tipo' => 'GOTEO_LENTO', 'mensaje' => 'Prueba']);
+        $url = '/api/pacientes/'.$patient->id;
+
+        $this->patchJson($url, ['nombre' => 'Nombre editado', 'activo' => false])->assertOk()
+            ->assertExactJson(['data' => ['id' => -35001, 'nombre' => 'Nombre editado',
+                'numero_cama' => 'cama-01', 'sala' => 'Sala A', 'activo' => true]]);
+        $this->patchJson($url, ['numero_cama' => 'CAMA-01', 'sala' => 'Sala B'])->assertOk();
+        $this->patchJson($url, ['numero_cama' => 'Cama-99'])->assertOk();
+        $this->getJson($url)->assertOk()->assertJsonPath('data.numero_cama', 'Cama-99')
+            ->assertJsonPath('data.sala', 'Sala B')->assertJsonPath('data.sesion.id', $session->id)
+            ->assertJsonPath('data.sesion.lecturas.0.id', $reading->id);
+        $this->assertDatabaseHas('alertas', ['id' => $alert->id, 'sesion_id' => $session->id, 'resuelta' => false]);
+        $this->assertDatabaseCount('sesiones', 1);
+    }
+
+    public function test_edit_rejects_reserved_beds_across_rooms_but_can_reuse_a_vacated_bed(): void
+    {
+        $patient = $this->patient();
+        $other = $this->patient(['numero_cama' => 'otra', 'sala' => 'Otra sala'], ['estado' => 'PAUSADA']);
+        $url = '/api/pacientes/'.$patient->id;
+        $patch = ['numero_cama' => ' OTRA ', 'nombre' => 'Editado'];
+
+        $this->patchJson($url, $patch)->assertConflict();
+        $other->update(['activo' => false]);
+        $this->patchJson($url, $patch)->assertConflict();
+        $this->assertDatabaseHas('pacientes', ['id' => $patient->id, 'numero_cama' => 'cama-01', 'nombre' => 'Paciente API']);
+        $other->sesiones()->update(['estado' => 'FINALIZADA', 'fin' => now()]);
+        $this->patchJson($url, $patch)->assertOk()->assertJsonPath('data.numero_cama', 'OTRA');
+    }
+
+    public function test_edit_requires_at_least_one_valid_editable_field(): void
+    {
+        $patient = $this->patient();
+        $url = '/api/pacientes/'.$patient->id;
+        foreach ([
+            [[], 'paciente'], [['activo' => false], 'paciente'], [['nombre' => null], 'nombre'],
+            [['nombre' => str_repeat('n', 151)], 'nombre'], [['numero_cama' => '   '], 'numero_cama'],
+            [['numero_cama' => str_repeat('c', 21)], 'numero_cama'], [['sala' => ['A']], 'sala'],
+            [['sala' => str_repeat('s', 51)], 'sala'],
+        ] as [$payload, $key]) {
+            $this->patchJson($url, $payload)->assertUnprocessable()->assertJsonValidationErrors($key);
+        }
+        $this->assertDatabaseHas('pacientes', ['id' => $patient->id, 'nombre' => 'Paciente API',
+            'activo' => true, 'sala' => 'Sala A', 'numero_cama' => 'cama-01']);
+    }
+
+    public static function openSessionStates(): array
+    {
+        return [['ACTIVA'], ['PAUSADA']];
+    }
+
+    #[DataProvider('openSessionStates')]
+    public function test_discharge_requires_confirmation_then_closes_only_the_open_session(string $state): void
+    {
+        $this->freezeSecond();
+        $patient = $this->patient([], ['estado' => $state, 'inicio' => now()->subHour()]);
+        $session = $patient->sesiones()->sole();
+        $old = $patient->sesiones()->create(['enfermera_id' => $session->enfermera_id, 'vol_total' => 100,
+            'modo_goteo' => 'NORMAL_GOTEO', 'estado' => 'FINALIZADA', 'inicio' => now()->subDays(2), 'fin' => now()->subDay()]);
+        $reading = $session->lecturas()->create(['gotas_por_min' => 19.9, 'vol_restante' => 20,
+            'tiempo_restante_min' => 40, 'timestamp_dispositivo' => now()]);
+        $alert = $session->alertas()->create(['tipo' => 'FIN_BOLSA', 'mensaje' => 'Prueba']);
+        $url = '/api/pacientes/'.$patient->id;
+
+        $this->deleteJson($url)->assertConflict();
+        $this->deleteJson($url, ['finalizar_sesion' => false])->assertConflict();
+        $this->deleteJson($url, ['finalizar_sesion' => 'true'])->assertUnprocessable()->assertJsonValidationErrors('finalizar_sesion');
+        $this->assertTrue($patient->fresh()->activo);
+        $this->assertDatabaseHas('sesiones', ['id' => $session->id, 'estado' => $state, 'fin' => null]);
+
+        $this->deleteJson($url, ['finalizar_sesion' => true])->assertNoContent();
+        $this->assertFalse($patient->fresh()->activo);
+        $this->assertSame('FINALIZADA', $session->fresh()->estado);
+        $this->assertTrue($session->fresh()->fin->equalTo(now()));
+        $this->assertTrue($old->fresh()->fin->equalTo(now()->subDay()));
+        $this->assertDatabaseHas('lecturas', ['id' => $reading->id, 'sesion_id' => $session->id]);
+        $this->assertDatabaseHas('alertas', ['id' => $alert->id, 'sesion_id' => $session->id, 'resuelta' => false]);
+        $this->getJson('/api/pacientes')->assertOk()->assertExactJson(['data' => []]);
+        $this->getJson('/api/sesiones/'.$session->id.'/lecturas')->assertOk()->assertJsonCount(1, 'data');
+        $this->deleteJson($url)->assertNotFound();
+        $this->patchJson($url, ['sala' => 'Nueva'])->assertNotFound();
+    }
+
+    public function test_edit_and_discharge_an_active_patient_without_a_session(): void
+    {
+        $patient = Paciente::create(['nombre' => 'Sin sesión', 'numero_cama' => 'libre', 'sala' => 'Sala A', 'activo' => true]);
+        $url = '/api/pacientes/'.$patient->id;
+        $this->patchJson($url, ['sala' => 'Sala B'])->assertOk()->assertJsonPath('data.sala', 'Sala B');
+        $this->deleteJson($url)->assertNoContent();
+        $this->assertDatabaseHas('pacientes', ['id' => $patient->id, 'activo' => false]);
+        $this->assertDatabaseCount('sesiones', 0);
+        $this->patchJson('/api/pacientes/999999', ['nombre' => 'X'])->assertNotFound();
+        $this->deleteJson('/api/pacientes/abc')->assertNotFound();
+    }
+
+    public function test_failure_to_deactivate_rolls_back_session_finalization(): void
+    {
+        $patient = $this->patient();
+        DB::unprepared("CREATE FUNCTION reject_discharge() RETURNS trigger LANGUAGE plpgsql AS
+            'BEGIN RAISE EXCEPTION ''discharge failed''; END;'");
+        DB::unprepared('CREATE TRIGGER reject_discharge BEFORE UPDATE OF activo ON pacientes
+            FOR EACH ROW EXECUTE FUNCTION reject_discharge()');
+
+        $this->deleteJson('/api/pacientes/'.$patient->id, ['finalizar_sesion' => true])->assertInternalServerError();
+        $this->assertTrue($patient->fresh()->activo);
+        $this->assertDatabaseHas('sesiones', ['paciente_id' => $patient->id, 'estado' => 'ACTIVA', 'fin' => null]);
     }
 }

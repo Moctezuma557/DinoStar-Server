@@ -1,0 +1,521 @@
+{
+  "info": {
+    "name": "DinoStar B1 #99 - Edición y baja de pacientes",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Prueba local en localhost:8000. Envía 01, copia la cama creada y registra una lectura según API_PACIENTES.md antes de enviar 02 a 14 en orden. Comprueba la enfermera activa de 01 y la cama ocupada de 05 en tu base local."
+  },
+  "variable": [
+    {
+      "key": "b1_cama",
+      "value": ""
+    },
+    {
+      "key": "b1_id",
+      "value": ""
+    },
+    {
+      "key": "b1_sesion",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "A - Alta",
+      "item": [
+        {
+          "name": "01 Crear paciente ficticio",
+          "request": {
+            "method": "POST",
+            "url": "http://localhost:8000/api/pacientes",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Paciente QA B1 reinicio\",\n  \"numero_cama\": \"{{b1_cama}}\",\n  \"sala\": \"QA B1\",\n  \"vol_total\": 500,\n  \"modo_goteo\": \"MICRO_GOTEO\",\n  \"tipo_solucion\": \"Salina de prueba\",\n  \"enfermera_id\": -35001\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "['b1_id','b1_sesion','b1_cama','hist_antes','identidad','bloqueo'].forEach(k=>pm.collectionVariables.unset(k));",
+                  "pm.collectionVariables.set('b1_cama', pm.environment.get('cama_corrida') || ('b1r-' + Date.now()));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201', () => { pm.response.to.have.status(201); });",
+                  "const v = k => pm.variables.get(k); const d = pm.response.json().data;",
+                  "pm.test('Se crean paciente y sesión activa con cama nueva', () => { pm.expect(d.nombre).to.eql('Paciente QA B1 reinicio'); pm.expect(d.numero_cama).to.eql(v('b1_cama')); pm.expect(d.id).to.be.above(0); pm.expect(d.sesion.paciente_id).to.eql(d.id); pm.expect(d.sesion.estado).to.eql('ACTIVA'); pm.expect(d.sesion.lecturas).to.deep.equal([]); pm.collectionVariables.set('b1_id', d.id); pm.collectionVariables.set('b1_sesion', d.sesion.id); console.log('Datos B1: paciente=' + d.id + ', sesion=' + d.sesion.id + ', cama=' + d.numero_cama); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "B - Historial, edición y baja",
+      "item": [
+        {
+          "name": "02 Confirmar que es el paciente ficticio de esta vuelta",
+          "request": {
+            "method": "GET",
+            "url": "http://localhost:8000/api/pacientes/{{b1_id}}",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "['identidad','hist_antes','bloqueo'].forEach(k=>pm.collectionVariables.unset(k));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => { pm.response.to.have.status(200); });",
+                  "const v = k => pm.variables.get(k); const d = pm.response.json().data;",
+                  "pm.test('Paciente y sesión identificados', () => { pm.expect(d.nombre).to.eql('Paciente QA B1 reinicio'); pm.expect(d.numero_cama).to.match(/^b1r-[0-9]+$/); pm.expect(d.id).to.eql(Number(v('b1_id'))); pm.expect(d.numero_cama).to.eql(v('b1_cama')); pm.expect(d.activo).to.eql(true); pm.expect(d.sesion.id).to.eql(Number(v('b1_sesion'))); pm.expect(d.sesion.estado).to.eql('ACTIVA'); pm.expect(d.sesion.fin).to.eql(null); pm.collectionVariables.set('identidad', String(pm.variables.get('b1_id')) + '/' + String(pm.variables.get('b1_sesion')) + '/' + String(pm.variables.get('b1_cama'))); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "03 Guardar la lectura inicial",
+          "request": {
+            "method": "GET",
+            "url": "http://localhost:8000/api/sesiones/{{b1_sesion}}/lecturas",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => { pm.response.to.have.status(200); });",
+                  "const v = k => pm.variables.get(k); const d = pm.response.json().data;",
+                  "pm.test('La sesión tiene la lectura de prueba', () => { pm.expect(d).to.have.lengthOf(1); pm.expect(d[0].gotas_por_min).to.eql(19.9); pm.expect(d[0].vol_restante).to.eql('45.20'); pm.expect(d[0].tiempo_restante_min).to.eql(136); pm.expect(d[0].timestamp_dispositivo).to.be.a('string'); pm.collectionVariables.set('hist_antes', JSON.stringify(d)); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "04 Editar nombre y sala",
+          "request": {
+            "method": "PATCH",
+            "url": "http://localhost:8000/api/pacientes/{{b1_id}}",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Paciente QA B1 reinicio editado\",\n  \"sala\": \"Sala B1 Norte\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.collectionVariables.get('identidad') !== (String(pm.variables.get('b1_id')) + '/' + String(pm.variables.get('b1_sesion')) + '/' + String(pm.variables.get('b1_cama')))) { pm.execution.skipRequest(); throw Error('Ejecuta primero 02 para verificar el paciente ficticio de esta corrida.'); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => { pm.response.to.have.status(200); });",
+                  "const v = k => pm.variables.get(k); const d = pm.response.json().data;",
+                  "pm.test('Solo cambian los campos enviados', () => { pm.expect(d.id).to.eql(Number(v('b1_id'))); pm.expect(d.nombre).to.eql('Paciente QA B1 reinicio editado'); pm.expect(d.sala).to.eql('Sala B1 Norte'); pm.expect(d.numero_cama).to.eql(v('b1_cama')); pm.expect(d.activo).to.eql(true); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "05 Intentar asignar CAMA-01 ya ocupada",
+          "request": {
+            "method": "PATCH",
+            "url": "http://localhost:8000/api/pacientes/{{b1_id}}",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"numero_cama\": \"CAMA-01\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.collectionVariables.get('identidad') !== (String(pm.variables.get('b1_id')) + '/' + String(pm.variables.get('b1_sesion')) + '/' + String(pm.variables.get('b1_cama')))) { pm.execution.skipRequest(); throw Error('Ejecuta primero 02 para verificar el paciente ficticio de esta corrida.'); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 409', () => { pm.response.to.have.status(409); });",
+                  "pm.test('Conflicto por cama ocupada', () => { pm.expect(pm.response.json().message).to.match(/cama.*ocupada/i); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "06 Rechazar nombre en blanco",
+          "request": {
+            "method": "PATCH",
+            "url": "http://localhost:8000/api/pacientes/{{b1_id}}",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"  \"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.collectionVariables.get('identidad') !== (String(pm.variables.get('b1_id')) + '/' + String(pm.variables.get('b1_sesion')) + '/' + String(pm.variables.get('b1_cama')))) { pm.execution.skipRequest(); throw Error('Ejecuta primero 02 para verificar el paciente ficticio de esta corrida.'); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 422', () => { pm.response.to.have.status(422); });",
+                  "pm.test('El error identifica el nombre', () => { pm.expect(pm.response.json().errors).to.have.property('nombre'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "07 Comprobar detalle tras los PATCH",
+          "request": {
+            "method": "GET",
+            "url": "http://localhost:8000/api/pacientes/{{b1_id}}",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => { pm.response.to.have.status(200); });",
+                  "const v = k => pm.variables.get(k); const d = pm.response.json().data;",
+                  "pm.test('Mantiene cama, sesión, edición y lectura', () => { pm.expect(d.id).to.eql(Number(v('b1_id'))); pm.expect(d.numero_cama).to.eql(v('b1_cama')); pm.expect(d.activo).to.eql(true); pm.expect(d.sesion.id).to.eql(Number(v('b1_sesion'))); pm.expect(d.sesion.estado).to.eql('ACTIVA'); pm.expect(d.sesion.fin).to.eql(null); pm.expect(d.nombre).to.eql('Paciente QA B1 reinicio editado'); pm.expect(d.sala).to.eql('Sala B1 Norte'); pm.expect(d.sesion.lecturas).to.have.lengthOf(1); pm.expect(d.sesion.lecturas[0].timestamp_dispositivo).to.eql(JSON.parse(pm.collectionVariables.get('hist_antes'))[0].timestamp_dispositivo); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "08 Comprobar listado activo",
+          "request": {
+            "method": "GET",
+            "url": "http://localhost:8000/api/pacientes?nombre=Paciente%20QA%20B1%20reinicio",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => { pm.response.to.have.status(200); });",
+                  "const v = k => pm.variables.get(k); const d = pm.response.json().data;",
+                  "pm.test('El ID nuevo está listado', () => { pm.expect(d.some(p => p.id === Number(v('b1_id')))).to.eql(true); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "09 Intentar baja sin confirmar",
+          "request": {
+            "method": "DELETE",
+            "url": "http://localhost:8000/api/pacientes/{{b1_id}}",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.collectionVariables.get('identidad') !== (String(pm.variables.get('b1_id')) + '/' + String(pm.variables.get('b1_sesion')) + '/' + String(pm.variables.get('b1_cama')))) { pm.execution.skipRequest(); throw Error('Ejecuta primero 02 para verificar el paciente ficticio de esta corrida.'); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 409', () => { pm.response.to.have.status(409); });",
+                  "pm.test('Se pide confirmación', () => { pm.expect(pm.response.json().message).to.include('finalizar_sesion'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "10 Verificar que el conflicto no hizo la baja",
+          "request": {
+            "method": "GET",
+            "url": "http://localhost:8000/api/pacientes/{{b1_id}}",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => { pm.response.to.have.status(200); });",
+                  "const v = k => pm.variables.get(k); const d = pm.response.json().data;",
+                  "pm.test('La sesión sigue activa y sin fecha de fin', () => { pm.expect(d.id).to.eql(Number(v('b1_id'))); pm.expect(d.numero_cama).to.eql(v('b1_cama')); pm.expect(d.activo).to.eql(true); pm.expect(d.sesion.id).to.eql(Number(v('b1_sesion'))); pm.expect(d.sesion.estado).to.eql('ACTIVA'); pm.expect(d.sesion.fin).to.eql(null); pm.collectionVariables.set('bloqueo', String(pm.variables.get('b1_id')) + '/' + String(pm.variables.get('b1_sesion')) + '/' + String(pm.variables.get('b1_cama'))); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "11 Confirmar baja del paciente ficticio",
+          "request": {
+            "method": "DELETE",
+            "url": "http://localhost:8000/api/pacientes/{{b1_id}}",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"finalizar_sesion\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.collectionVariables.get('identidad') !== (String(pm.variables.get('b1_id')) + '/' + String(pm.variables.get('b1_sesion')) + '/' + String(pm.variables.get('b1_cama')))) { pm.execution.skipRequest(); throw Error('Ejecuta primero 02 para verificar el paciente ficticio de esta corrida.'); }",
+                  "if (!pm.collectionVariables.get('hist_antes') || pm.collectionVariables.get('bloqueo') !== (String(pm.variables.get('b1_id')) + '/' + String(pm.variables.get('b1_sesion')) + '/' + String(pm.variables.get('b1_cama')))) { pm.execution.skipRequest(); throw Error('Faltan la lectura inicial o la comprobación de sesión activa tras el 409.'); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 204', () => { pm.response.to.have.status(204); });",
+                  "pm.test('Sin cuerpo', () => { pm.expect(pm.response.text()).to.eql(''); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "12 El detalle activo ya no está disponible",
+          "request": {
+            "method": "GET",
+            "url": "http://localhost:8000/api/pacientes/{{b1_id}}",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 404', () => { pm.response.to.have.status(404); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "13 El listado ya no contiene al paciente",
+          "request": {
+            "method": "GET",
+            "url": "http://localhost:8000/api/pacientes?nombre=Paciente%20QA%20B1%20reinicio",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => { pm.response.to.have.status(200); });",
+                  "const v = k => pm.variables.get(k); const d = pm.response.json().data;",
+                  "pm.test('El ID ya no está listado', () => { pm.expect(d.some(p => p.id === Number(v('b1_id')))).to.eql(false); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "14 Comparar el historial después de la baja",
+          "request": {
+            "method": "GET",
+            "url": "http://localhost:8000/api/sesiones/{{b1_sesion}}/lecturas",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => { pm.response.to.have.status(200); });",
+                  "const v = k => pm.variables.get(k); const d = pm.response.json().data;",
+                  "pm.test('Misma lectura con exactamente el mismo timestamp', () => { pm.expect(d).to.deep.equal(JSON.parse(pm.collectionVariables.get('hist_antes'))); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
