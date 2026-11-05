@@ -1,4 +1,4 @@
-export const navigationItems = [
+﻿export const navigationItems = [
   {
     id: "panel",
     label: "Panel Principal",
@@ -23,12 +23,5 @@ export const navigationItems = [
     label: "Dispositivos",
     to: "/dispositivos",
     icono: "monitor",
-  },
-  {
-    id: "alertas",
-    label: "Alertas",
-    to: "/alertas",
-    icono: "campana",
-    badge: "alertasActivas",
   },
 ];

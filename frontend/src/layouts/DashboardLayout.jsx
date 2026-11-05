@@ -409,7 +409,7 @@ export default function DashboardLayout({
         <div className={styles.headerDerecha}>
           <button
             type="button"
-            className={styles.campana}
+            className={`${styles.campana} ${cantidadAlertas > 0 ? styles.pulsando : ''}`}
             onClick={() => {
               setMostrarBanner(false);
               setTriggerAlerta((prev) => prev + 1);
