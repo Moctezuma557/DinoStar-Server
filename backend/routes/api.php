@@ -1,9 +1,10 @@
 <?php
 
-use App\Http\Controllers\PacienteController;
-use App\Http\Controllers\SesionLecturaController;
 use App\Http\Controllers\EnfermeraController;
 use App\Http\Controllers\LogDispositivoController;
+use App\Http\Controllers\PacienteController;
+use App\Http\Controllers\SesionController;
+use App\Http\Controllers\SesionLecturaController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/pacientes', [PacienteController::class, 'index'])->name('pacientes.index');
@@ -18,7 +19,13 @@ Route::get('/enfermeras', [EnfermeraController::class, 'index'])->name('enfermer
 Route::get('/enfermeras/{id}', [EnfermeraController::class, 'show'])->name('enfermeras.show');
 Route::post('/enfermeras', [EnfermeraController::class, 'store'])->name('enfermeras.store');
 
-//Route::middleware(['auth:sanctum', 'admin'])->group(function () {
-    Route::get('/dispositivos/logs', [LogDispositivoController::class, 'index']);
-  //      ->name('dispositivos.logs.index');
-//});
+// Route::middleware(['auth:sanctum', 'admin'])->group(function () {
+Route::get('/dispositivos/logs', [LogDispositivoController::class, 'index']);
+//      ->name('dispositivos.logs.index');
+// });
+
+Route::post('/sesiones', [SesionController::class, 'store'])->name('sesiones.store');
+Route::patch('/sesiones/{id}', [SesionController::class, 'update'])
+    ->where('id', '[0-9]{1,18}')->name('sesiones.update');
+Route::post('/sesiones/{id}/finalizar', [SesionController::class, 'finalizar'])
+    ->where('id', '[0-9]{1,18}')->name('sesiones.finalizar');

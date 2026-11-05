@@ -3,10 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Models\User;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
-use Illuminate\Http\JsonResponse;
 
 class EnfermeraController extends Controller
 {
@@ -41,7 +41,7 @@ class EnfermeraController extends Controller
             ->where('id', $id)
             ->first(['id', 'nombre', 'email', 'rol', 'turno', 'activo']);
 
-        if (!$enfermera) {
+        if (! $enfermera) {
             return response()->json(['message' => 'Enfermera no encontrada.'], 404);
         }
 
