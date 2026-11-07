@@ -121,6 +121,27 @@ const TRAZOS = {
       <path d="M12 17v4" />
     </>
   ),
+  flechaIzquierda: (
+    <>
+      <path d="m12 19-7-7 7-7" />
+      <path d="M19 12H5" />
+    </>
+  ),
+
+  velocimetro: (
+    <>
+      <path d="m12 14 4-4" />
+      <path d="M3.34 19a10 10 0 1 1 17.32 0" />
+    </>
+  ),
+
+  probeta: (
+    <>
+      <path d="M10 2v7.31a2 2 0 0 1-.28 1.02L4.7 19.4A1.5 1.5 0 0 0 6 21.67h12a1.5 1.5 0 0 0 1.3-2.26l-5.02-9.08A2 2 0 0 1 14 9.31V2" />
+      <path d="M8.5 2h7" />
+      <path d="M7 16h10" />
+    </>
+  ),
 };
 
 export default function Icono({ nombre, tamano = 18, grosor = 2, ...resto }) {
