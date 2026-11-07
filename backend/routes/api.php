@@ -3,6 +3,7 @@
 use App\Http\Controllers\EnfermeraController;
 use App\Http\Controllers\LogDispositivoController;
 use App\Http\Controllers\PacienteController;
+use App\Http\Controllers\SesionController;
 use App\Http\Controllers\SesionLecturaController;
 use Illuminate\Support\Facades\Route;
 
@@ -26,3 +27,9 @@ Route::post('/enfermeras', [EnfermeraController::class, 'store'])->name('enferme
 Route::get('/dispositivos/logs', [LogDispositivoController::class, 'index']);
 //      ->name('dispositivos.logs.index');
 // });
+
+Route::post('/sesiones', [SesionController::class, 'store'])->name('sesiones.store');
+Route::patch('/sesiones/{id}', [SesionController::class, 'update'])
+    ->where('id', '[0-9]{1,18}')->name('sesiones.update');
+Route::post('/sesiones/{id}/finalizar', [SesionController::class, 'finalizar'])
+    ->where('id', '[0-9]{1,18}')->name('sesiones.finalizar');

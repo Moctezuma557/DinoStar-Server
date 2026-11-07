@@ -51,6 +51,11 @@ export default function AlertaBanner({ alertas = [], onClose }) {
                   Goteo: <strong className={styles.valorGoteo}>{alerta.gotasPorMin ?? 0} gtt/min</strong>
                 </span>
                 <span className={styles.textoEsperado}>Esperado: {alerta.esperado || "120 ml/h"}</span>
+                {alerta.tipoAlerta && (
+                  <div>
+                    <span>Tipo: {alerta.tipoAlerta}</span>
+                  </div>
+                )}
               </div>
             </div>
           ))
