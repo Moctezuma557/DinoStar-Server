@@ -4,12 +4,15 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\ListPacienteRequest;
 use App\Http\Requests\StorePacienteRequest;
+use App\Http\Requests\UpdatePacienteRequest;
 use App\Http\Resources\PacienteResource;
 use App\Http\Resources\PacienteResumenResource;
 use App\Models\Paciente;
 use App\Services\RegistroPacienteService;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
 
 class PacienteController extends Controller
@@ -52,5 +55,20 @@ class PacienteController extends Controller
         abort_if($patient === null, 404, 'Paciente no encontrado o sin sesión activa.');
 
         return new PacienteResource($patient);
+    }
+
+    public function update(UpdatePacienteRequest $request, string $id, RegistroPacienteService $service): JsonResponse
+    {
+        $patient = $service->actualizar($id, $request->validated());
+
+        return response()->json(['data' => $patient->only(['id', 'nombre', 'numero_cama', 'sala', 'activo'])]);
+    }
+
+    public function destroy(Request $request, string $id, RegistroPacienteService $service): Response
+    {
+        $data = $request->validate(['finalizar_sesion' => ['sometimes', 'required', 'boolean:strict']]);
+        $service->darDeBaja($id, $data['finalizar_sesion'] ?? false);
+
+        return response()->noContent();
     }
 }

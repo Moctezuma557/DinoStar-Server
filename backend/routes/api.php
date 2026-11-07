@@ -11,6 +11,10 @@ Route::get('/pacientes', [PacienteController::class, 'index'])->name('pacientes.
 Route::post('/pacientes', [PacienteController::class, 'store'])->name('pacientes.store');
 Route::get('/pacientes/{id}', [PacienteController::class, 'show'])
     ->where('id', '-?[0-9]{1,18}')->name('pacientes.show');
+Route::patch('/pacientes/{id}', [PacienteController::class, 'update'])
+    ->where('id', '-?[0-9]{1,18}')->name('pacientes.update');
+Route::delete('/pacientes/{id}', [PacienteController::class, 'destroy'])
+    ->where('id', '-?[0-9]{1,18}')->name('pacientes.destroy');
 
 Route::get('/sesiones/{id}/lecturas', [SesionLecturaController::class, 'index'])
     ->where('id', '-?[0-9]{1,18}')->name('sesiones.lecturas.index');
