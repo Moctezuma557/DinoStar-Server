@@ -1,0 +1,556 @@
+{
+  "info": {
+    "name": "DinoStar B2 #112 - Usuarios",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Prueba local de B2. Ejecutar 01 a 15 en orden, una iteración. Crea su propia enfermera y termina con baja lógica. No usa IDs de usuarios existentes. ADMIN por seeder/BD durante esta etapa. USUARIOS_API.md incluye el contrato y pruebas aisladas del último administrador."
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000",
+      "type": "string"
+    },
+    {
+      "key": "b2_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "b2_email",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "b2_nombre",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "const base = pm.variables.get(\"base_url\");",
+          "if (!/^http:\\/\\/(localhost|127\\.0\\.0\\.1):\\d+$/.test(base)) { pm.execution.skipRequest(); throw new Error(\"Usa exclusivamente el backend local.\"); }",
+          "if (!pm.info.requestName.startsWith(\"01 \")) {",
+          "  const id = String(pm.collectionVariables.get(\"b2_id\") || \"\");",
+          "  const email = String(pm.collectionVariables.get(\"b2_email\") || \"\");",
+          "  if (!/^\\d+$/.test(id) || !/^b2-[a-z0-9-]+@example\\.test$/.test(email)) { pm.execution.skipRequest(); throw new Error(\"Primero ejecuta 01 correctamente.\"); }",
+          "}"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "01 Crear enfermera propia",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base_url}}/api/usuarios",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"nombre\": \"{{b2_nombre}}\",\n  \"email\": \"{{b2_email}}\",\n  \"password\": \"Prueba-B2-123\",\n  \"rol\": \"ENFERMERA\",\n  \"turno\": \"MATUTINO\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.collectionVariables.unset(\"b2_id\");",
+              "const runId = pm.variables.replaceIn(\"{{$guid}}\").toLowerCase();",
+              "pm.collectionVariables.set(\"b2_email\", \"b2-\" + runId + \"@example.test\");",
+              "pm.collectionVariables.set(\"b2_nombre\", \"QA-B2-\" + runId);",
+              "pm.collectionVariables.set(\"b2_email_upper\", (\"b2-\" + runId + \"@example.test\").toUpperCase());"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));",
+              "if (pm.response.code === 201) {",
+              "  const u = pm.response.json().data;",
+              "  pm.test(\"Enfermera activa, email normalizado y sin contraseña\", () => { pm.expect(u.rol).to.eql(\"ENFERMERA\"); pm.expect(u.activo).to.eql(true); pm.expect(u.email).to.eql(pm.collectionVariables.get(\"b2_email\")); pm.expect(u).not.to.have.property(\"password\"); });",
+              "  pm.collectionVariables.set(\"b2_id\", String(u.id));",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 Filtrar rol, activo y nombre",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base_url}}/api/usuarios?rol=ENFERMERA&activo=true&nombre={{b2_nombre}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "pm.test(\"Contiene exclusivamente la enfermera creada\", () => { const rows = pm.response.json().data; pm.expect(rows).to.have.lengthOf(1); pm.expect(String(rows[0].id)).to.eql(pm.collectionVariables.get(\"b2_id\")); pm.expect(rows[0]).not.to.have.property(\"password\"); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 Rechazar email duplicado en mayúsculas",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base_url}}/api/usuarios",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"nombre\": \"{{b2_nombre}}\",\n  \"email\": \"{{b2_email_upper}}\",\n  \"password\": \"Prueba-B2-123\",\n  \"rol\": \"ENFERMERA\",\n  \"turno\": \"MATUTINO\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 422\", () => pm.response.to.have.status(422));",
+              "pm.test(\"Error de email\", () => pm.expect(pm.response.json().errors).to.have.property(\"email\"));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 Rechazar contraseña corta",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base_url}}/api/usuarios",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"nombre\": \"{{b2_nombre}}\",\n  \"email\": \"{{b2_email}}\",\n  \"password\": \"1234567\",\n  \"rol\": \"ENFERMERA\",\n  \"turno\": \"MATUTINO\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 422\", () => pm.response.to.have.status(422));",
+              "pm.test(\"Error de password\", () => pm.expect(pm.response.json().errors).to.have.property(\"password\"));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 Rechazar enfermera sin turno",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base_url}}/api/usuarios",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"nombre\": \"{{b2_nombre}}\",\n  \"email\": \"{{b2_email}}\",\n  \"password\": \"Prueba-B2-123\",\n  \"rol\": \"ENFERMERA\",\n  \"turno\": null\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 422\", () => pm.response.to.have.status(422));",
+              "pm.test(\"Error de turno\", () => pm.expect(pm.response.json().errors).to.have.property(\"turno\"));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 Rechazar creación de ADMIN",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base_url}}/api/usuarios",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"nombre\": \"{{b2_nombre}}\",\n  \"email\": \"{{b2_email}}\",\n  \"password\": \"Prueba-B2-123\",\n  \"rol\": \"ADMIN\",\n  \"turno\": null\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 403\", () => pm.response.to.have.status(403));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "07 Editar turno y contraseña",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base_url}}/api/usuarios/{{b2_id}}",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"nombre\": \"{{b2_nombre}}-editada\",\n  \"turno\": \"VESPERTINO\",\n  \"password\": \"Nueva-B2-123\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "pm.test(\"Edición aplicada sin exponer contraseña\", () => { const u = pm.response.json().data; pm.expect(u.nombre).to.eql(pm.collectionVariables.get(\"b2_nombre\") + \"-editada\"); pm.expect(u.turno).to.eql(\"VESPERTINO\"); pm.expect(u).not.to.have.property(\"password\"); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "08 Rechazar promoción a ADMIN",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base_url}}/api/usuarios/{{b2_id}}",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"rol\": \"ADMIN\",\n  \"turno\": null\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 403\", () => pm.response.to.have.status(403));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "09 Confirmar que sigue siendo enfermera",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base_url}}/api/usuarios?rol=ENFERMERA&activo=true&nombre={{b2_nombre}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "pm.test(\"Contiene exclusivamente la enfermera creada\", () => { const rows = pm.response.json().data; pm.expect(rows).to.have.lengthOf(1); pm.expect(String(rows[0].id)).to.eql(pm.collectionVariables.get(\"b2_id\")); pm.expect(rows[0]).not.to.have.property(\"password\"); });",
+              "pm.test(\"Se conserva el turno tras el rechazo\", () => pm.expect(pm.response.json().data[0].turno).to.eql(\"VESPERTINO\"));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "10 Dar de baja",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base_url}}/api/usuarios/{{b2_id}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 204\", () => pm.response.to.have.status(204));",
+              "pm.test(\"Sin cuerpo de respuesta\", () => pm.expect(pm.response.text()).to.eql(\"\"));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "11 No aparece entre activos",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base_url}}/api/usuarios?rol=ENFERMERA&activo=true&nombre={{b2_nombre}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "pm.test(\"Lista vacía\", () => pm.expect(pm.response.json().data).to.eql([]));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "12 Conserva el registro inactivo",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base_url}}/api/usuarios?rol=ENFERMERA&activo=false&nombre={{b2_nombre}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "pm.test(\"Contiene exclusivamente la enfermera creada\", () => { const rows = pm.response.json().data; pm.expect(rows).to.have.lengthOf(1); pm.expect(String(rows[0].id)).to.eql(pm.collectionVariables.get(\"b2_id\")); pm.expect(rows[0]).not.to.have.property(\"password\"); });",
+              "pm.test(\"Baja lógica\", () => pm.expect(pm.response.json().data[0].activo).to.eql(false));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "13 Email inactivo sigue reservado",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base_url}}/api/usuarios",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"nombre\": \"{{b2_nombre}}\",\n  \"email\": \"{{b2_email}}\",\n  \"password\": \"Prueba-B2-123\",\n  \"rol\": \"ENFERMERA\",\n  \"turno\": \"MATUTINO\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 422\", () => pm.response.to.have.status(422));",
+              "pm.test(\"Error de email\", () => pm.expect(pm.response.json().errors).to.have.property(\"email\"));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "14 Reactivar",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base_url}}/api/usuarios/{{b2_id}}",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"activo\": true\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "pm.test(\"Usuario reactivado\", () => pm.expect(pm.response.json().data.activo).to.eql(true));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "15 Dejar la enfermera de prueba inactiva",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base_url}}/api/usuarios/{{b2_id}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 204\", () => pm.response.to.have.status(204));"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
