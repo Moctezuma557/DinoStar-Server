@@ -6,7 +6,15 @@ use App\Http\Controllers\LogDispositivoController;
 use App\Http\Controllers\PacienteController;
 use App\Http\Controllers\SesionController;
 use App\Http\Controllers\SesionLecturaController;
+use App\Http\Controllers\UsuarioController;
 use Illuminate\Support\Facades\Route;
+
+Route::get('/usuarios', [UsuarioController::class, 'index'])->name('usuarios.index');
+Route::post('/usuarios', [UsuarioController::class, 'store'])->name('usuarios.store');
+Route::patch('/usuarios/{id}', [UsuarioController::class, 'update'])
+    ->where('id', '-?[0-9]{1,18}')->name('usuarios.update');
+Route::delete('/usuarios/{id}', [UsuarioController::class, 'destroy'])
+    ->where('id', '-?[0-9]{1,18}')->name('usuarios.destroy');
 
 Route::get('/pacientes', [PacienteController::class, 'index'])->name('pacientes.index');
 Route::post('/pacientes', [PacienteController::class, 'store'])->name('pacientes.store');
