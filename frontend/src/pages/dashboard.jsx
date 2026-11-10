@@ -1,29 +1,30 @@
-﻿import { useEffect, useState } from 'react';
+﻿import { useEffect, useMemo, useState } from 'react';
 import TarjetaPaciente from "../components/TarjetaPaciente";
 import Icono from "../components/Icono";
 import { useDashboardContext } from "../layouts/DashboardLayout";
+import { contiene } from "../utils/texto";
 import "./dashboard.css";
-
-
-const SALAS = [
-  { id: "icu-oeste", nombre: "ICU â€“ Ala Oeste (Adultos & Agudos)" },
-  { id: "pediatria-b", nombre: "Unidad PediÃ¡trica B" },
-  { id: "medicina-interna", nombre: "Medicina Interna â€“ Ala Norte" },
-];
+const TODAS_LAS_SALAS = "todas";
 
 function textoBuscable(paciente) {
-  return [paciente.nombre, paciente.cama, paciente.idPaciente]
+  return [paciente.nombre, paciente.cama, paciente.sala, paciente.idPaciente]
     .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
+    .join(" ");
 }
 
 export default function Dashboard() {
-  // Consumimos los pacientes globales y el trigger de alerta directamente del layout
-  const { pacientes,setPacientes, triggerAlerta, enfermera } = useDashboardContext();
-  const enfermeraIdReal = enfermera?.id ?? 1;  // Fallback a 1 si no hay ID de sesiÃ³n
+  const {
+    pacientes,
+    setPacientes,
+    triggerAlerta,
+    enfermera,
+    cargandoPacientes,
+    errorPacientes,
+  } = useDashboardContext();
 
-  const [sala, setSala] = useState(SALAS[0].id);
+  const enfermeraIdReal = enfermera?.id ?? 1;  
+
+  const [sala, setSala] = useState(TODAS_LAS_SALAS);
   const [busqueda, setBusqueda] = useState("");
   const [filtro, setFiltro] = useState("todos");
 
@@ -33,12 +34,99 @@ export default function Dashboard() {
     }
   }, [triggerAlerta]);
 
+  const salas = useMemo(() => {
+    const unicas = new Set(
+      pacientes
+        .map((paciente) => paciente.sala)
+        .filter((valor) => valor && String(valor).trim() !== "")
+    );
+    return [...unicas].sort((a, b) => a.localeCompare(b, "es"));
+  }, [pacientes]);
+
   const totalAlertas = pacientes.filter((p) => p.estado === "alerta").length;
 
-  const termino = busqueda.trim().toLowerCase();
+  const hayFiltrosActivos =
+    sala !== TODAS_LAS_SALAS || busqueda.trim() !== "" || filtro !== "todos";
+
+  const limpiarFiltros = () => {
+    setSala(TODAS_LAS_SALAS);
+    setBusqueda("");
+    setFiltro("todos");
+  };
+
   const pacientesVisibles = pacientes
+    .filter((p) => sala === TODAS_LAS_SALAS || p.sala === sala)
     .filter((p) => (filtro === "alertas" ? p.estado === "alerta" : true))
-    .filter((p) => termino === "" || textoBuscable(p).includes(termino));
+    .filter((p) => contiene(textoBuscable(p), busqueda));
+
+  function renderizarContenido() {
+    if (cargandoPacientes) {
+      return (
+        <div className="estado-vacio-dashboard">
+          <h3>Cargando pacientes…</h3>
+        </div>
+      );
+    }
+
+    if (errorPacientes) {
+      return (
+        <div className="estado-vacio-dashboard" role="alert">
+          <h3>No se pudo cargar la lista de pacientes</h3>
+          <p>Revisa la conexión con el servidor e inténtalo de nuevo.</p>
+        </div>
+      );
+    }
+
+    if (pacientes.length === 0) {
+      return (
+        <div className="estado-vacio-dashboard">
+          <h3>No hay pacientes con venoclisis activa</h3>
+          <p>En cuanto se registre una sesión aparecerá aquí.</p>
+        </div>
+      );
+    }
+
+    if (pacientesVisibles.length === 0) {
+      return (
+        <div className="estado-vacio-dashboard">
+          <h3>Ningún paciente coincide con los filtros actuales</h3>
+          <p>
+            Hay {pacientes.length}{" "}
+            {pacientes.length === 1 ? "paciente activo" : "pacientes activos"} en total.
+          </p>
+          {hayFiltrosActivos && (
+            <button
+              type="button"
+              className="filtro-opcion"
+              onClick={limpiarFiltros}
+            >
+              Quitar filtros
+            </button>
+          )}
+        </div>
+      );
+    }
+
+    return (
+      <div className="grid-tarjetas-pacientes">
+        {pacientesVisibles.map((paciente) => (
+          <TarjetaPaciente
+            key={paciente.id || paciente.cama}
+            {...paciente}
+            id={paciente.alertaId ?? paciente.id}      
+            enfermeraId={enfermeraIdReal}
+            onAlertaResuelta={(idAlerta) => setPacientes((prevPacientes) =>
+              prevPacientes.map((p) =>
+                p.id === idAlerta
+                  ? { ...p, estado: "normal", tipoAlerta: null }
+                  : p
+              )
+            )}
+          />
+        ))}
+      </div>
+    );
+  }
 
   return (
     <div className="contenedor-dashboard-vista">
@@ -49,11 +137,12 @@ export default function Dashboard() {
             className="selector-sala-control"
             value={sala}
             onChange={(evento) => setSala(evento.target.value)}
-            aria-label="Seleccionar sala"
+            aria-label="Filtrar por sala"
           >
-            {SALAS.map((opcion) => (
-              <option key={opcion.id} value={opcion.id}>
-                {opcion.nombre}
+            <option value={TODAS_LAS_SALAS}>Todas las salas</option>
+            {salas.map((nombreSala) => (
+              <option key={nombreSala} value={nombreSala}>
+                {nombreSala}
               </option>
             ))}
           </select>
@@ -65,10 +154,10 @@ export default function Dashboard() {
           <input
             type="search"
             className="buscador-dashboard-campo"
-            placeholder="Buscar pacientes o numero de sala..."
+            placeholder="Buscar por nombre, cama, sala o ID…"
             value={busqueda}
             onChange={(evento) => setBusqueda(evento.target.value)}
-            aria-label="Buscar pacientes o numero de sala"
+            aria-label="Buscar por nombre, cama, sala o ID"
           />
         </div>
 
@@ -77,6 +166,7 @@ export default function Dashboard() {
             type="button"
             className={`filtro-opcion ${filtro === "todos" ? "activa" : ""}`}
             onClick={() => setFiltro("todos")}
+            aria-pressed={filtro === "todos"}
           >
             Todos los Pacientes
           </button>
@@ -84,6 +174,7 @@ export default function Dashboard() {
             type="button"
             className={`filtro-opcion ${filtro === "alertas" ? "activa" : ""}`}
             onClick={() => setFiltro("alertas")}
+            aria-pressed={filtro === "alertas"}
           >
             Solo Alertas
             {totalAlertas > 0 && <span className="filtro-badge">{totalAlertas}</span>}
@@ -96,31 +187,7 @@ export default function Dashboard() {
         </button>
       </div>
 
-      <div className="seccion-contenido-dashboard">
-        {pacientesVisibles.length === 0 ? (
-          <div className="estado-vacio-dashboard">
-            <h3>Ningun paciente coincide con los filtros actuales</h3>
-          </div>
-        ) : (
-          <div className="grid-tarjetas-pacientes">
-            {pacientesVisibles.map((paciente) => (
-              <TarjetaPaciente 
-                key={paciente.id || paciente.cama} 
-                {...paciente}
-                id={paciente.alertaId ?? paciente.id}      // <--- AquÃ­ enviamos el ID de la alerta
-                enfermeraId={enfermeraIdReal} 
-                onAlertaResuelta={(idAlerta) => setPacientes((prevPacientes) =>
-                  prevPacientes.map((p) =>
-                    p.id === idAlerta 
-                      ? { ...p, estado: "normal", tipoAlerta: null } 
-                      : p
-                  )
-                )}
-              />
-            ))}
-          </div>
-        )}
-      </div>
+      <div className="seccion-contenido-dashboard">{renderizarContenido()}</div>
     </div>
   );
 }
