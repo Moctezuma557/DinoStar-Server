@@ -12,21 +12,7 @@ class RegistroPacienteService
     public function registrar(array $data): Paciente
     {
         return DB::transaction(function () use ($data): Paciente {
-            // Serialize registrations even when the bed has no patient row yet.
-            // MQTT identifies beds globally by numero_cama, without a room field.
-            DB::select('SELECT pg_advisory_xact_lock(hashtextextended(lower(?), 0))', [
-                'registro-paciente:'.$data['numero_cama'],
-            ]);
-
-            $occupied = Paciente::query()
-                ->whereRaw('lower(numero_cama) = lower(?)', [$data['numero_cama']])
-                ->where(function ($query): void {
-                    $query->where('activo', true)->orWhereHas('sesiones', function ($sessions): void {
-                        $sessions->whereIn('estado', ['ACTIVA', 'PAUSADA']);
-                    });
-                })->lockForUpdate()->first();
-
-            abort_if($occupied !== null, 409, 'La cama ya está ocupada por un paciente activo o una sesión en curso.');
+            $this->reservarCama($data['numero_cama']);
 
             // Recheck under a lock: the nurse may have changed after request validation.
             $nurse = User::query()->whereKey($data['enfermera_id'])->where('rol', 'ENFERMERA')
@@ -49,5 +35,54 @@ class RegistroPacienteService
 
             return $patient->load('sesionActiva.lecturas');
         });
+    }
+
+    public function actualizar(string $id, array $data): Paciente
+    {
+        return DB::transaction(function () use ($id, $data): Paciente {
+            $patient = $this->pacienteActivoBloqueado($id);
+            if (isset($data['numero_cama']) || isset($data['sala'])) {
+                $this->reservarCama($data['numero_cama'] ?? $patient->numero_cama, $patient->id);
+            }
+            $patient->update($data);
+
+            return $patient;
+        });
+    }
+
+    public function darDeBaja(string $id, bool $finalizarSesion): void
+    {
+        DB::transaction(function () use ($id, $finalizarSesion): void {
+            $patient = $this->pacienteActivoBloqueado($id);
+            $session = $patient->sesiones()->whereIn('estado', ['ACTIVA', 'PAUSADA'])->lockForUpdate()->first();
+
+            if ($session !== null) {
+                abort_unless($finalizarSesion, 409, 'El paciente tiene una sesión en curso. Confirme con finalizar_sesion: true.');
+                $session->update(['estado' => 'FINALIZADA', 'fin' => now()]);
+            }
+
+            $patient->update(['activo' => false]);
+        });
+    }
+
+    private function pacienteActivoBloqueado(string $id): Paciente
+    {
+        $patient = Paciente::query()->where('activo', true)->lockForUpdate()->find($id);
+        abort_if($patient === null, 404, 'Paciente no encontrado o inactivo.');
+
+        return $patient;
+    }
+
+    private function reservarCama(string $cama, ?int $exceptoId = null): void
+    {
+        // POST and PATCH must serialize even when no row exists for the target bed.
+        DB::select('SELECT pg_advisory_xact_lock(hashtextextended(lower(?), 0))', ['registro-paciente:'.$cama]);
+        $occupied = Paciente::query()->whereRaw('lower(numero_cama) = lower(?)', [$cama])
+            ->when($exceptoId !== null, fn ($query) => $query->where('id', '!=', $exceptoId))
+            ->where(function ($query): void {
+                $query->where('activo', true)->orWhereHas('sesiones', fn ($sessions) => $sessions->whereIn('estado', ['ACTIVA', 'PAUSADA']));
+            })->exists();
+
+        abort_if($occupied, 409, 'La cama ya está ocupada por un paciente activo o una sesión en curso.');
     }
 }

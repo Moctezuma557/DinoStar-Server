@@ -1,7 +1,11 @@
+import { useState } from 'react';
 import { analizarVolumen } from '../utils/volumen';
 import './tarjetapaciente.css';
+import { resolverAlerta, getAlertasActivas} from '../services/alertas';
 
 export default function TarjetaPaciente({
+  id,
+  cama,
   nombre,
   edad,
   idPaciente,
@@ -15,11 +19,52 @@ export default function TarjetaPaciente({
   estado,
   textoEstado,
   nombreSolucion,
-  tipoBajante
+  tipoBajante,
+  enfermeraId,       // ID de la enfermera actual
+  onAlertaResuelta
 }) {
   const estadoSeguro = estado ?? "normal";
   const textoEstadoSeguro = textoEstado || "GOTEO REGULAR";
   const volumen = analizarVolumen(volRestante, volTotal);
+  const [cargando, setCargando] = useState(false);
+  const [errorMensaje, setErrorMensaje] = useState(null);
+
+  const handleMarcarAtendida = async () => {
+    if (cargando) return;
+
+    setCargando(true);
+    setErrorMensaje(null);
+
+    try {
+      const alertasActivas = await getAlertasActivas();
+
+      const alertaCorrespondiente = alertasActivas.find(
+        (a) => Number(a.sesion_id) === Number(id) ||
+               String(a.cama ?? "").trim().toLowerCase() === String(cama ?? "").trim().toLowerCase()
+      );
+
+      if (!alertaCorrespondiente) {
+        throw new Error("No se encontró una alerta activa en la base de datos para este paciente.");
+      }
+
+      await resolverAlerta(alertaCorrespondiente.id, enfermeraId ?? -35001);
+
+      if (onAlertaResuelta) {
+        onAlertaResuelta(id);
+      }
+    } catch (error) {
+      console.error("Error detallado al marcar como atendida:", error);
+      if (error.status === 409) {
+        if (onAlertaResuelta) {
+          onAlertaResuelta(id);
+        }
+      } else {
+        setErrorMensaje("Error al conectar con el servidor. Intente de nuevo.");
+      }
+    } finally {
+      setCargando(false);
+    }
+  };
 
   return (
     <div className={`tarjeta-paciente-componente estado-${estadoSeguro}`}>
@@ -128,6 +173,29 @@ export default function TarjetaPaciente({
             <span className="tiempo-valor">{tiempoRestante ?? "Sin lectura"}</span>
           </div>
         </div>
+
+        {/* Botón condicional de alerta */}
+{estadoSeguro === 'alerta' && (
+  <div className="alerta-accion-container">
+    {errorMensaje && (
+      <span className="alerta-error-mensaje">
+        {errorMensaje}
+      </span>
+    )}
+    <button
+      type="button"
+      className="btn--alerta-pildora"
+      onClick={handleMarcarAtendida}
+      disabled={cargando}
+    >
+      <span>{cargando ? "Actualizando..." : "Marcar como atendida"}</span>
+    </button>
+  </div>
+)}
+
+
+
+
       </div>
     </div>
   );

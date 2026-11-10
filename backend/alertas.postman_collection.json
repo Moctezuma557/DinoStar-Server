@@ -1,0 +1,177 @@
+{
+  "info": {
+    "name": "DinoStar — API de Alertas",
+    "description": "Pruebas integrales para la API de Alertas. Requiere configurar base_url, alerta_id, sesion_id y enfermera_id. Cubre listado filtrado, resolución exitosa de alerta y detección de conflictos (HTTP 409).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://localhost:8000" },
+    { "key": "alerta_id", "value": "" },
+    { "key": "sesion_id", "value": "" },
+    { "key": "enfermera_id", "value": "" },
+    { "key": "alerta_inexistente_id", "value": "999999999999999999" }
+  ],
+  "item": [
+    {
+      "name": "01 Listar alertas pendientes (resuelta=false)",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Accept", "value": "application/json" }
+        ],
+        "url": "{{base_url}}/api/alertas?resuelta=false"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200 OK', () => pm.response.to.have.status(200));",
+              "pm.test('Estructura de respuesta correcta', () => {",
+              "    pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json');",
+              "    pm.expect(pm.response.json().data).to.be.an('array');",
+              "});",
+              "pm.test('Todas las alertas del listado están pendientes', () => {",
+              "    const data = pm.response.json().data;",
+              "    for (const alerta of data) {",
+              "        pm.expect(alerta.resuelta).to.eql(false);",
+              "    }",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 Listar alertas filtradas por sesión",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Accept", "value": "application/json" }
+        ],
+        "url": "{{base_url}}/api/alertas?sesion_id={{sesion_id}}"
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if (!/^-?[0-9]+$/.test(String(pm.variables.get('sesion_id') || ''))) { throw new Error('Configura sesion_id con el ID numérico de una sesión existente.'); }"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200 OK', () => pm.response.to.have.status(200));",
+              "pm.test('Respuesta contiene arreglo data', () => {",
+              "    pm.expect(pm.response.json().data).to.be.an('array');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 Resolver alerta existente",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Accept", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"resuelta\": true,\n  \"enfermera_id\": {{enfermera_id}},\n  \"notas\": \"Atención realizada correctamente desde Postman.\"\n}"
+        },
+        "url": "{{base_url}}/api/alertas/{{alerta_id}}"
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if (!/^[0-9]+$/.test(String(pm.variables.get('alerta_id') || ''))) { throw new Error('Configura alerta_id con el ID de la alerta a resolver.'); }",
+              "if (!/^-?[0-9]+$/.test(String(pm.variables.get('enfermera_id') || ''))) { throw new Error('Configura enfermera_id con el ID de una enfermera registrada.'); }"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200 OK', () => pm.response.to.have.status(200));",
+              "pm.test('Alerta resuelta exitosamente', () => {",
+              "    const res = pm.response.json();",
+              "    pm.expect(res.data.id).to.eql(Number(pm.variables.get('alerta_id')));",
+              "    pm.expect(res.data.resuelta).to.eql(true);",
+              "    pm.expect(res.data.atenciones).to.be.an('array').that.is.not.empty;",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 Intentar resolver alerta ya atendida (Conflicto 409)",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Accept", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"resuelta\": true,\n  \"enfermera_id\": {{enfermera_id}},\n  \"notas\": \"Intento redundante de resolución.\"\n}"
+        },
+        "url": "{{base_url}}/api/alertas/{{alerta_id}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 409 Conflict', () => pm.response.to.have.status(409));",
+              "pm.test('Mensaje de conflicto por alerta resuelta', () => {",
+              "    pm.expect(pm.response.json().message).to.be.a('string');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 Alerta inexistente",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Accept", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"resuelta\": true,\n  \"enfermera_id\": {{enfermera_id}}\n}"
+        },
+        "url": "{{base_url}}/api/alertas/{{alerta_inexistente_id}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 404 Not Found', () => pm.response.to.have.status(404));"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
