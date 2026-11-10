@@ -1,21 +1,21 @@
 import { useState } from 'react';
+import { analizarVolumen } from '../utils/volumen';
 import './tarjetapaciente.css';
 import { resolverAlerta, getAlertasActivas} from '../services/alertas';
 
 export default function TarjetaPaciente({
   id,
-  cama, 
-  nombre, 
-  edad, 
-  idPaciente,  
-  gotasPorMin, 
-  estadoRitmo, 
-  flujoActual, 
-  metaFlujo, 
-  porcentajeVolumen, 
-  volRestante, 
-  volTotal, 
-  tiempoRestante, 
+  cama,
+  nombre,
+  edad,
+  idPaciente,
+  gotasPorMin,
+  estadoRitmo,
+  flujoActual,
+  metaFlujo,
+  volRestante,
+  volTotal,
+  tiempoRestante,
   estado,
   textoEstado,
   nombreSolucion,
@@ -25,8 +25,7 @@ export default function TarjetaPaciente({
 }) {
   const estadoSeguro = estado ?? "normal";
   const textoEstadoSeguro = textoEstado || "GOTEO REGULAR";
-
-  // Estados locales para carga y errores en la tarjeta
+  const volumen = analizarVolumen(volRestante, volTotal);
   const [cargando, setCargando] = useState(false);
   const [errorMensaje, setErrorMensaje] = useState(null);
 
@@ -37,12 +36,10 @@ export default function TarjetaPaciente({
     setErrorMensaje(null);
 
     try {
-      // 1. Obtenemos las alertas activas directamente
       const alertasActivas = await getAlertasActivas();
-      
-      // 2. Buscamos la alerta correspondiente por sesion_id o número de cama
+
       const alertaCorrespondiente = alertasActivas.find(
-        (a) => Number(a.sesion_id) === Number(id) || 
+        (a) => Number(a.sesion_id) === Number(id) ||
                String(a.cama ?? "").trim().toLowerCase() === String(cama ?? "").trim().toLowerCase()
       );
 
@@ -50,7 +47,6 @@ export default function TarjetaPaciente({
         throw new Error("No se encontró una alerta activa en la base de datos para este paciente.");
       }
 
-      // 3. Ejecutamos el PATCH con el ID real de la alerta y la enfermera -35001
       await resolverAlerta(alertaCorrespondiente.id, enfermeraId ?? -35001);
 
       if (onAlertaResuelta) {
@@ -80,7 +76,7 @@ export default function TarjetaPaciente({
       </div>
 
       <div className="tarjeta-paciente-body">
-        {/* Información del Paciente */}
+        {}
         <div className="paciente-info-principal">
           <div className="paciente-nombre-seccion">
             <h3>{nombre}</h3>
@@ -95,14 +91,15 @@ export default function TarjetaPaciente({
           </div>
         </div>
 
-        {/* Ritmo de Goteo y Flujo Actual */}
+        {}
         <div className="grid-metricas-infusion">
           <div className="metrica-card">
             <div className="metrica-header">
               <span className="metrica-titulo">RITMO DE GOTEO</span>
             </div>
             <div className="metrica-valor-grupo">
-              <span className="valor-principal">{gotasPorMin}</span>
+              {}
+              <span className="valor-principal">{gotasPorMin ?? "—"}</span>
               <span className="unidad-medida">gtt/min</span>
             </div>
             <span className="metrica-subtext texto-verde">{estadoRitmo}</span>
@@ -123,29 +120,60 @@ export default function TarjetaPaciente({
           </div>
         </div>
 
-
-        
-
         {/* Volumen Restante y Tiempo */}
         <div className="info-volumen-seccion">
           <div className="volumen-header-row">
             <span className="volumen-titulo-label">Volumen Restante</span>
-            <span className="volumen-porcentaje-valor">{porcentajeVolumen}% • {volRestante} / {volTotal} ml</span>
+            <span
+              className={
+                volumen.hayDato
+                  ? "volumen-porcentaje-valor"
+                  : "volumen-porcentaje-valor volumen-sin-lectura"
+              }
+            >
+              {volumen.texto}
+            </span>
           </div>
-          
-          <div className="barra-progreso-container">
-            <div 
-              className="barra-progreso-fill" 
-              style={{ width: `${porcentajeVolumen}%` }}
+
+          {volumen.hayDato ? (
+            <div
+              className="barra-progreso-container"
+              role="progressbar"
+              aria-valuenow={volumen.porcentaje}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-label="Volumen restante en la bolsa"
+            >
+              <div
+                className={
+                  volumen.incoherente
+                    ? "barra-progreso-fill barra-incoherente"
+                    : "barra-progreso-fill"
+                }
+                style={{ width: `${volumen.porcentaje}%` }}
+              ></div>
+            </div>
+          ) : (
+            <div
+              className="barra-progreso-container barra-sin-dato"
+              aria-hidden="true"
             ></div>
-          </div>
+          )}
+
+          {volumen.incoherente && (
+            <p className="aviso-volumen-incoherente" role="alert">
+              La lectura reporta {volumen.restante} ml en una bolsa de{" "}
+              {volumen.total} ml. El dato recibido es incoherente y el
+              porcentaje se muestra acotado.
+            </p>
+          )}
 
           <div className="tiempo-restante-row">
             <span className="tiempo-label">Tiempo Restante</span>
-            <span className="tiempo-valor">{tiempoRestante}</span>
+            <span className="tiempo-valor">{tiempoRestante ?? "Sin lectura"}</span>
           </div>
         </div>
-        
+
         {/* Botón condicional de alerta */}
 {estadoSeguro === 'alerta' && (
   <div className="alerta-accion-container">
@@ -159,12 +187,12 @@ export default function TarjetaPaciente({
       className="btn--alerta-pildora"
       onClick={handleMarcarAtendida}
       disabled={cargando}
-    > 
+    >
       <span>{cargando ? "Actualizando..." : "Marcar como atendida"}</span>
     </button>
   </div>
 )}
-        
+
 
 
 

@@ -6,6 +6,7 @@ import logoDinoStar from "../assets/Logo.png";
 import AlertaBanner from "../components/AlertaBanner";
 import echo from "../echo";
 import { getPacientes } from "../api/pacientes";
+import { analizarVolumen, numeroONulo } from "../utils/volumen";
 
 const DashboardContext = createContext();
 export const useDashboardContext = () => useContext(DashboardContext);
@@ -57,13 +58,21 @@ function factorGoteo(modo) {
 }
 
 function calcularFlujoMlH(gotasPorMin, modo) {
+  if (gotasPorMin === null) return null;
   return (gotasPorMin * 60) / factorGoteo(modo);
 }
 
+function redondearFlujo(flujo) {
+  if (flujo === null) return null;
+  return Math.round(flujo * 10) / 10;
+}
+
 function formatearTiempoRestante(minutos) {
-  const total = Math.max(0, Number(minutos) || 0);
+  const total = numeroONulo(minutos);
+  if (total === null || total < 0) return null;
+
   const horas = Math.floor(total / 60);
-  const mins = total % 60;
+  const mins = Math.round(total % 60);
   return `Restan est. ${horas}h ${mins}m`;
 }
 
@@ -82,35 +91,32 @@ function formatearHora(timestamp) {
 }
 
 function calcularPorcentaje(volRestante, volTotal) {
-  if (!Number.isFinite(volTotal) || volTotal <= 0) return 0;
-
-  const porcentaje = Math.round((volRestante / volTotal) * 100);
-  return Math.min(100, Math.max(0, porcentaje));
+  return analizarVolumen(volRestante, volTotal).porcentaje;
 }
 
 function calcularEstadoTarjeta(gotasPorMin, volRestante) {
-  if (volRestante < 50) {
+  if (volRestante !== null && volRestante < 50) {
     return {
       estado: "alerta",
       textoEstado: "ALERTA DE INFUSIÓN",
       tipoAlerta: "FIN_BOLSA",
     };
   }
-  if (gotasPorMin < 20) {
+  if (gotasPorMin !== null && gotasPorMin < 20) {
     return {
       estado: "alerta",
       textoEstado: "ALERTA DE INFUSIÓN",
       tipoAlerta: "GOTEO_LENTO",
     };
   }
-  if (gotasPorMin > 60) {
+  if (gotasPorMin !== null && gotasPorMin > 60) {
     return {
       estado: "alerta",
       textoEstado: "ALERTA DE INFUSIÓN",
       tipoAlerta: "GOTEO_RAPIDO",
     };
   }
-  if (volRestante < 100) {
+  if (volRestante !== null && volRestante < 100) {
     return { estado: "atencion", textoEstado: "ATENCIÓN REQUERIDA", tipoAlerta: null };
   }
 
@@ -118,10 +124,9 @@ function calcularEstadoTarjeta(gotasPorMin, volRestante) {
 }
 
 function crearPacienteDesdePaquete(pacienteDb, packet) {
-  const gotasPorMin = Number(packet.gotasPorMin) || 0;
-  const volRestante = Number(packet.volRestante) || 0;
-  const tiempoRestante = Number(packet.tiempoRestante) || 0;
-  const volTotal = Number(pacienteDb.vol_total) || 0;
+  const gotasPorMin = numeroONulo(packet.gotasPorMin);
+  const volRestante = numeroONulo(packet.volRestante);
+  const volTotal = numeroONulo(pacienteDb.vol_total);
   const modoGoteo = packet.modo ?? pacienteDb.modo_goteo;
   const infoEstado = calcularEstadoTarjeta(gotasPorMin, volRestante);
 
@@ -135,13 +140,13 @@ function crearPacienteDesdePaquete(pacienteDb, packet) {
     idPaciente: `${pacienteDb.sala} • ID: ${pacienteDb.id}`,
     enfermeraId: pacienteDb.enfermera_id,
     gotasPorMin,
-    flujoActual: Math.round(calcularFlujoMlH(gotasPorMin, modoGoteo) * 10) / 10,
+    flujoActual: redondearFlujo(calcularFlujoMlH(gotasPorMin, modoGoteo)),
     estadoRitmo: modoGoteo === "MICRO_GOTEO" ? "Microgoteo" : "Macrogoteo",
     metaFlujo: null,
     porcentajeVolumen: calcularPorcentaje(volRestante, volTotal),
     volRestante,
     volTotal,
-    tiempoRestante: formatearTiempoRestante(tiempoRestante),
+    tiempoRestante: formatearTiempoRestante(packet.tiempoRestante),
     estado: infoEstado.estado,
     textoEstado: infoEstado.textoEstado,
     nombreSolucion: pacienteDb.tipo_solucion || "Solución sin registrar",
@@ -154,24 +159,23 @@ function crearPacienteDesdePaquete(pacienteDb, packet) {
 }
 
 function actualizarPacienteConPaquete(paciente, packet) {
-  const gotasPorMin = Number(packet.gotasPorMin) || 0;
-  const volRestante = Number(packet.volRestante) || 0;
-  const tiempoRestante = Number(packet.tiempoRestante) || 0;
-  const volTotal = Number(paciente.volTotal) || 0;
+  const gotasPorMin = numeroONulo(packet.gotasPorMin);
+  const volRestante = numeroONulo(packet.volRestante);
+  const volTotal = numeroONulo(paciente.volTotal);
   const modoGoteo = packet.modo ?? paciente.modoGoteo;
   const infoEstado = calcularEstadoTarjeta(gotasPorMin, volRestante);
 
   return {
     ...paciente,
     gotasPorMin,
-    flujoActual: Math.round(calcularFlujoMlH(gotasPorMin, modoGoteo) * 10) / 10,
+    flujoActual: redondearFlujo(calcularFlujoMlH(gotasPorMin, modoGoteo)),
     estadoRitmo: modoGoteo === "MICRO_GOTEO" ? "Microgoteo" : "Macrogoteo",
     modoGoteo,
     tipoBajante:
       modoGoteo === "MICRO_GOTEO" ? "MICRO (60 GTT/ML)" : "NORMAL (20 GTT/ML)",
     porcentajeVolumen: calcularPorcentaje(volRestante, volTotal),
     volRestante,
-    tiempoRestante: formatearTiempoRestante(tiempoRestante),
+    tiempoRestante: formatearTiempoRestante(packet.tiempoRestante),
     estado: infoEstado.estado,
     textoEstado: infoEstado.textoEstado,
     tipoAlerta: infoEstado.tipoAlerta,
