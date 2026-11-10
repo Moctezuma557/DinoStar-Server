@@ -20,6 +20,7 @@ import Dispositivos from "./pages/dispositivos";
 
 // Datos temporales hasta que exista la autenticación real.
 const enfermeraDemo = {
+  id: -35001,
   nombre: "Enf. M. Arismendi",
   estado: "Activo",
   unidad: "Medicina Interna",

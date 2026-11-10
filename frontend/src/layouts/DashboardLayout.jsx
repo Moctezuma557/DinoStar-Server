@@ -127,6 +127,7 @@ function crearPacienteDesdePaquete(pacienteDb, packet) {
 
   return {
     id: pacienteDb.id,
+    alertaId: packet.alerta_id ?? packet.alertaId ?? pacienteDb.id, // ID real de la alerta
     cama: pacienteDb.numero_cama,
     pacienteId: pacienteDb.numero_cama,
     nombre: pacienteDb.nombre,
@@ -448,17 +449,21 @@ export default function DashboardLayout({
       {mostrarBanner && (
         <AlertaBanner
           alertas={alertasActivas}
+          enfermeraId={enfermera?.id ?? 1} // Ajusta según el ID de la enfermera en tu sesión
           onClose={() => setMostrarBanner(false)}
-          onViewDashboard={() => {
-            setMostrarBanner(false);
-            setTriggerAlerta((prev) => prev + 1);
-            onNavigate?.("panel", "/dashboard");
-          }}
-        />
+          onAlertaResuelta={(idAlertaResuelta) => {
+          // Cambia el estado local de la alerta para que desaparezca del banner y baje el contador
+          setPacientes((prevPacientes) =>
+          prevPacientes.map((p) => 
+            p.id === idAlertaResuelta ? { ...p, estado: "normal", tipoAlerta: null } : p
+        )
+      );
+    }}
+  />    
       )}
 
       <main className={styles.content}>
-        <DashboardContext.Provider value={{ pacientes, setPacientes, triggerAlerta }}>
+        <DashboardContext.Provider value={{ pacientes, setPacientes, triggerAlerta, enfermera }}>
           {children}
         </DashboardContext.Provider>
       </main>
