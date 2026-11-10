@@ -1,7 +1,9 @@
 import { Link, useParams } from "react-router-dom";
+import Icono from "../components/Icono";
 import { usePacienteDetalle } from "../hooks/usePacienteDetalle";
 import { useLecturas } from "../hooks/useLecturas";
 import "./paciente.css";
+
 const FACTOR_GOTEO = {
   NORMAL_GOTEO: 20,
   MICRO_GOTEO: 60,
@@ -18,7 +20,7 @@ function mililitrosPorHora(gotasPorMin, modoGoteo) {
   return Math.round((gotasPorMin * 60) / factor);
 }
 
-
+/** 320 → "5h 20m" */
 function formatearDuracion(minutos) {
   if (!Number.isFinite(minutos)) return "—";
   const horas = Math.floor(minutos / 60);
@@ -26,7 +28,6 @@ function formatearDuracion(minutos) {
   if (horas === 0) return `${resto}m`;
   return `${horas}h ${String(resto).padStart(2, "0")}m`;
 }
-
 
 function horaDeFin(minutosRestantes) {
   if (!Number.isFinite(minutosRestantes)) return "—";
@@ -50,7 +51,7 @@ function formatearMarca(iso) {
   });
 }
 
-
+/** "cama-01" → "Cama-01" */
 function etiquetaCama(cama) {
   if (!cama) return "Sin cama";
   return cama.charAt(0).toUpperCase() + cama.slice(1);
@@ -61,6 +62,10 @@ function numero(valor, decimales = 1) {
   return Number(valor.toFixed(decimales)).toLocaleString("es-MX");
 }
 
+function acotar(valor, minimo, maximo) {
+  if (!Number.isFinite(valor)) return minimo;
+  return Math.min(maximo, Math.max(minimo, valor));
+}
 
 function HistorialLecturas({ lecturas, modoGoteo, desactualizado }) {
   if (lecturas.length === 0) {
@@ -71,7 +76,6 @@ function HistorialLecturas({ lecturas, modoGoteo, desactualizado }) {
     );
   }
 
-  
   const masRecientesPrimero = [...lecturas].reverse();
 
   return (
@@ -119,7 +123,6 @@ function HistorialLecturas({ lecturas, modoGoteo, desactualizado }) {
     </div>
   );
 }
-
 export default function Paciente() {
   const { id } = useParams();
 
@@ -129,7 +132,6 @@ export default function Paciente() {
     detalle?.sesion?.id ?? null,
     detalle?.lecturas ?? []
   );
-
 
 
   if (cargando) {
@@ -180,15 +182,19 @@ export default function Paciente() {
     );
   }
 
-  
+  /* --------------------------- Derivados -------------------------- */
 
   const ultima = lecturas.length > 0 ? lecturas[lecturas.length - 1] : null;
 
   const volRestante = ultima?.volRestante ?? sesion.volTotal;
   const volInfundido = Math.max(0, sesion.volTotal - volRestante);
+  const lecturaInconsistente =
+    sesion.volTotal > 0 && volRestante > sesion.volTotal;
 
   const porcentajeRestante =
-    sesion.volTotal > 0 ? (volRestante / sesion.volTotal) * 100 : 0;
+    sesion.volTotal > 0
+      ? acotar((volRestante / sesion.volTotal) * 100, 0, 100)
+      : 0;
   const porcentajeInfundido = 100 - porcentajeRestante;
 
   const flujoActual = ultima
@@ -203,6 +209,14 @@ export default function Paciente() {
   return (
     <div className="contenedor-paciente-vista">
       {}
+      <nav className="barra-navegacion-paciente" aria-label="Navegación del detalle">
+        <Link to="/pacientes" className="boton-elegir-otro">
+          <Icono nombre="flechaIzquierda" tamano={16} />
+          Elegir otro paciente
+        </Link>
+      </nav>
+
+      {/* 1. Tarjeta Superior: Datos Generales del Paciente */}
       <div className="tarjeta-info-superior">
         <div className="detalles-principales-paciente">
           <div className="fila-titulo-paciente">
@@ -228,7 +242,7 @@ export default function Paciente() {
       </div>
 
       <div className="tarjeta-infusion-principal">
-        {}
+        {/* Cabecera del canal de infusión */}
         <div className="cabecera-canal">
           <div className="info-canal-izq">
             <span className="texto-canal-pequeno">
@@ -253,13 +267,14 @@ export default function Paciente() {
         </div>
 
         <div className="grid-monitoreo">
-          {}
+          {/* Columna Izquierda: Gráfico de bolsa / Nivel */}
           <div className="columna-bolsa-visual">
             <div className="caja-visual-bolsa">
               <span className="capacidad-total">
                 {numero(sesion.volTotal, 0)} ml
               </span>
               <div className="liquido-nivel">
+                {}
                 <span className="porcentaje-texto">
                   {Math.floor(porcentajeRestante)}%
                 </span>
@@ -269,14 +284,25 @@ export default function Paciente() {
               </div>
               <div className="etiqueta-solucion-footer">{sesion.solucion}</div>
             </div>
+
+            {lecturaInconsistente && (
+              <p className="aviso-lectura-inconsistente" role="alert">
+                La última lectura reporta {numero(volRestante, 2)} ml, más
+                que los {numero(sesion.volTotal, 0)} ml registrados para
+                esta bolsa. El porcentaje se muestra acotado al 100 %.
+              </p>
+            )}
           </div>
 
-          {}
+          {/* Columna Derecha: Métricas */}
           <div className="columna-metricas-controles">
             <div className="fila-metricas-doble">
-              {}
+              {/* Flujo */}
               <div className="card-metrica-item">
-                <span className="label-metrica">VELOCIDAD DE FLUJO</span>
+                <span className="label-metrica">
+                  <Icono nombre="velocimetro" tamano={13} />
+                  VELOCIDAD DE FLUJO
+                </span>
                 <div className="valor-metrica-num">
                   {flujoActual === null ? "—" : flujoActual} <span>ml / h</span>
                 </div>
@@ -285,9 +311,12 @@ export default function Paciente() {
                 </span>
               </div>
 
-              {}
+              {/* Goteo */}
               <div className="card-metrica-item">
-                <span className="label-metrica">RITMO DE GOTEO (GTT)</span>
+                <span className="label-metrica">
+                  <Icono nombre="gota" tamano={13} />
+                  RITMO DE GOTEO (GTT)
+                </span>
                 <div className="valor-metrica-num">
                   {ultima ? numero(ultima.gotasPorMin) : "—"}{" "}
                   <span>gotas / min</span>
@@ -301,9 +330,12 @@ export default function Paciente() {
             </div>
 
             <div className="fila-metricas-doble">
-              {}
+              {/* Volumen infundido */}
               <div className="card-metrica-item">
-                <span className="label-metrica">VOLUMEN INFUNDIDO / VTBI</span>
+                <span className="label-metrica">
+                  <Icono nombre="probeta" tamano={13} />
+                  VOLUMEN INFUNDIDO / VTBI
+                </span>
                 <div className="valor-metrica-num">
                   {numero(volInfundido, 2)} ml{" "}
                   <span>/ {numero(sesion.volTotal, 0)} ml</span>
@@ -327,9 +359,10 @@ export default function Paciente() {
                 </span>
               </div>
 
-              {}
+              {/* Tiempo restante */}
               <div className="card-metrica-item">
                 <span className="label-metrica">
+                  <Icono nombre="reloj" tamano={13} />
                   TIEMPO RESTANTE DE INFUSIÓN
                 </span>
                 <div className="valor-metrica-num">
@@ -345,7 +378,7 @@ export default function Paciente() {
               </div>
             </div>
 
-            {}
+            {/* Estado inferior */}
             <div className="panel-inferior-controles">
               <div className="caja-estado-actual">
                 <span className="label-metrica">ESTADO:</span>
