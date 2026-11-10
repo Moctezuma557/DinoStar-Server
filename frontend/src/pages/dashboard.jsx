@@ -1,13 +1,14 @@
-import { useEffect, useState } from 'react';
+﻿import { useEffect, useState } from 'react';
 import TarjetaPaciente from "../components/TarjetaPaciente";
 import Icono from "../components/Icono";
 import { useDashboardContext } from "../layouts/DashboardLayout";
 import "./dashboard.css";
 
+
 const SALAS = [
-  { id: "icu-oeste", nombre: "ICU – Ala Oeste (Adultos & Agudos)" },
-  { id: "pediatria-b", nombre: "Unidad Pediátrica B" },
-  { id: "medicina-interna", nombre: "Medicina Interna – Ala Norte" },
+  { id: "icu-oeste", nombre: "ICU â€“ Ala Oeste (Adultos & Agudos)" },
+  { id: "pediatria-b", nombre: "Unidad PediÃ¡trica B" },
+  { id: "medicina-interna", nombre: "Medicina Interna â€“ Ala Norte" },
 ];
 
 function textoBuscable(paciente) {
@@ -19,7 +20,8 @@ function textoBuscable(paciente) {
 
 export default function Dashboard() {
   // Consumimos los pacientes globales y el trigger de alerta directamente del layout
-  const { pacientes, triggerAlerta } = useDashboardContext();
+  const { pacientes,setPacientes, triggerAlerta, enfermera } = useDashboardContext();
+  const enfermeraIdReal = enfermera?.id ?? 1;  // Fallback a 1 si no hay ID de sesiÃ³n
 
   const [sala, setSala] = useState(SALAS[0].id);
   const [busqueda, setBusqueda] = useState("");
@@ -63,10 +65,10 @@ export default function Dashboard() {
           <input
             type="search"
             className="buscador-dashboard-campo"
-            placeholder="Buscar pacientes o número de sala..."
+            placeholder="Buscar pacientes o numero de sala..."
             value={busqueda}
             onChange={(evento) => setBusqueda(evento.target.value)}
-            aria-label="Buscar pacientes o número de sala"
+            aria-label="Buscar pacientes o numero de sala"
           />
         </div>
 
@@ -97,12 +99,24 @@ export default function Dashboard() {
       <div className="seccion-contenido-dashboard">
         {pacientesVisibles.length === 0 ? (
           <div className="estado-vacio-dashboard">
-            <h3>Ningún paciente coincide con los filtros actuales</h3>
+            <h3>Ningun paciente coincide con los filtros actuales</h3>
           </div>
         ) : (
           <div className="grid-tarjetas-pacientes">
             {pacientesVisibles.map((paciente) => (
-              <TarjetaPaciente key={paciente.id || paciente.cama} {...paciente} />
+              <TarjetaPaciente 
+                key={paciente.id || paciente.cama} 
+                {...paciente}
+                id={paciente.alertaId ?? paciente.id}      // <--- AquÃ­ enviamos el ID de la alerta
+                enfermeraId={enfermeraIdReal} 
+                onAlertaResuelta={(idAlerta) => setPacientes((prevPacientes) =>
+                  prevPacientes.map((p) =>
+                    p.id === idAlerta 
+                      ? { ...p, estado: "normal", tipoAlerta: null } 
+                      : p
+                  )
+                )}
+              />
             ))}
           </div>
         )}
