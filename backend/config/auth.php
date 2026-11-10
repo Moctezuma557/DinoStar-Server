@@ -114,4 +114,25 @@ return [
 
     'password_timeout' => env('AUTH_PASSWORD_TIMEOUT', 10800),
 
+    /*
+    |--------------------------------------------------------------------------
+    | API de autenticacion (K3)
+    |--------------------------------------------------------------------------
+    |
+    | proteger_rutas: cuando es true, las rutas CRUD exigen token Bearer y rol.
+    | Se activa cuando el frontend ya envia Authorization; mientras sea false
+    | solo /api/login, /api/logout y /api/me usan autenticacion.
+    |
+    | tokens: vigencia en minutos de cada token Sanctum.
+    |   admin     -> sesion corta, siempre (ignora "recordar").
+    |   enfermera -> sesion normal (un turno) o, con recordar=true, larga.
+    */
+    'proteger_rutas' => env('AUTH_PROTEGER_RUTAS', false),
+
+    'tokens' => [
+        'admin' => (int) env('AUTH_TOKEN_MINUTOS_ADMIN', 60),
+        'enfermera' => (int) env('AUTH_TOKEN_MINUTOS_ENFERMERA', 480),
+        'enfermera_recordar' => (int) env('AUTH_TOKEN_MINUTOS_RECORDAR', 43200),
+    ],
+
 ];
