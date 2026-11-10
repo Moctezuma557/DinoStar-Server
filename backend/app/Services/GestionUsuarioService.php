@@ -37,6 +37,7 @@ class GestionUsuarioService
                 $this->validarEmail($data['email'], $user->id);
             }
             $user->fill($data)->save();
+            $this->revocarTokensSiCorresponde($user);
 
             return $user;
         });
@@ -52,7 +53,16 @@ class GestionUsuarioService
             if ($user->activo) {
                 $user->update(['activo' => false]);
             }
+            $user->tokens()->delete();
         });
+    }
+
+    /** Baja o cambio de contrasena/rol: las sesiones abiertas dejan de ser validas. */
+    private function revocarTokensSiCorresponde(User $user): void
+    {
+        if (! $user->activo || $user->wasChanged(['password', 'rol'])) {
+            $user->tokens()->delete();
+        }
     }
 
     private function bloquearAdministradores(): void
