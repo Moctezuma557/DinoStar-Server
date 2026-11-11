@@ -268,3 +268,12 @@
 .btn-ver-detalle:hover {
   background-color: var(--color-primario-oscuro);
 }
+
+.estado-vacio-dashboard .filtro-opcion {
+  margin-top: 12px;
+  border: 1px solid var(--color-borde);
+  border-radius: var(--radio-pildora);
+  padding: 8px 18px;
+  background: var(--color-superficie);
+  cursor: pointer;
+}

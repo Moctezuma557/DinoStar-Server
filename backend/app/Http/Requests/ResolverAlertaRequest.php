@@ -18,7 +18,7 @@ class ResolverAlertaRequest extends FormRequest
             'resuelta' => ['required', 'accepted'],
             // TODO(auth): cuando exista autenticación, tomar la enfermera de $this->user()
             // y dejar de exigir enfermera_id en el body.
-            'enfermera_id' => [
+            'enfermera_id' => $this->user() ? ['nullable'] : [
                 'required',
                 'integer',
                 Rule::exists('usuarios', 'id')->where('rol', 'ENFERMERA')->where('activo', true),

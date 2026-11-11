@@ -38,14 +38,14 @@ class AlertaController extends Controller
     {
         $alerta = Alerta::findOrFail($id);
 
-        // TODO(auth): usar $request->user()->getKey() cuando auth esté listo.
+        // Con sesion, la enfermera es siempre la del token; el body solo se usa sin auth.
         $enfermeraId = $request->user()?->getKey() ?? $request->validated('enfermera_id');
 
         $yaResuelta = false;
 
         try {
             DB::transaction(function () use ($request, $alerta, $enfermeraId, &$yaResuelta): void {
-                // UPDATE condicional: es atómico. Si dos requests compiten, solo uno afecta la fila.
+                // UPDATE condicional: es atomico. Si dos requests compiten, solo uno afecta la fila.
                 $actualizadas = Alerta::whereKey($alerta->getKey())
                     ->where('resuelta', false)
                     ->update(['resuelta' => true]);
