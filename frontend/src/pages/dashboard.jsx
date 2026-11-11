@@ -1,21 +1,11 @@
-﻿import { useEffect, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import TarjetaPaciente from "../components/TarjetaPaciente";
 import Icono from "../components/Icono";
 import { useDashboardContext } from "../layouts/DashboardLayout";
 import OpcionesAltaModal from "../components/DialogoAltas";
-import "./dashboard.css";
-
-const SALAS = [
-  { id: "icu-oeste", nombre: "ICU  Ala Oeste (Adultos & Agudos)" },
-  { id: "pediatria-b", nombre: "Unidad Pediatrica B" },
-  { id: "medicina-interna", nombre: "Medicina Interna  Ala Norte" },
-];
-﻿import { useEffect, useMemo, useState } from 'react';
-import TarjetaPaciente from "../components/TarjetaPaciente";
-import Icono from "../components/Icono";
-import { useDashboardContext } from "../layouts/DashboardLayout";
 import { contiene } from "../utils/texto";
 import "./dashboard.css";
+
 const TODAS_LAS_SALAS = "todas";
 
 function textoBuscable(paciente) {
@@ -30,16 +20,14 @@ export default function Dashboard() {
     setPacientes,
     triggerAlerta,
     enfermera,
+    cargandoPacientes,
+    errorPacientes,
     catalogoPacientes,
     refrescarPacientes,
   } = useDashboardContext();
+
   const enfermeraIdReal = enfermera?.id ?? 1;
   const [isOpcionesAltaOpen, setIsOpcionesAltaOpen] = useState(false);
-    cargandoPacientes,
-    errorPacientes,
-  } = useDashboardContext();
-
-  const enfermeraIdReal = enfermera?.id ?? 1;  
 
   const [sala, setSala] = useState(TODAS_LAS_SALAS);
   const [busqueda, setBusqueda] = useState("");
@@ -130,7 +118,7 @@ export default function Dashboard() {
           <TarjetaPaciente
             key={paciente.id || paciente.cama}
             {...paciente}
-            id={paciente.alertaId ?? paciente.id}      
+            id={paciente.alertaId ?? paciente.id}
             enfermeraId={enfermeraIdReal}
             onAlertaResuelta={(idAlerta) => setPacientes((prevPacientes) =>
               prevPacientes.map((p) =>
@@ -214,7 +202,11 @@ export default function Dashboard() {
           </button>
         </div>
 
-        <button type="button" className="boton-alta" onClick={() => setIsOpcionesAltaOpen(true)}>
+        <button
+          type="button"
+          className="boton-alta"
+          onClick={() => setIsOpcionesAltaOpen(true)}
+        >
           <Icono nombre="agregarUsuario" tamano={16} />
           Opciones de alta
         </button>
@@ -230,33 +222,6 @@ export default function Dashboard() {
         />
       )}
 
-      <div className="seccion-contenido-dashboard">
-        {pacientesVisibles.length === 0 ? (
-          <div className="estado-vacio-dashboard">
-            <h3>Ningun paciente coincide con los filtros actuales</h3>
-          </div>
-        ) : (
-          <div className="grid-tarjetas-pacientes">
-            {pacientesVisibles.map((paciente) => (
-              <TarjetaPaciente
-                key={paciente.id || paciente.cama}
-                {...paciente}
-                id={paciente.alertaId ?? paciente.id}
-                enfermeraId={enfermeraIdReal}
-                onAlertaResuelta={(idAlerta) =>
-                  setPacientes((prevPacientes) =>
-                    prevPacientes.map((p) =>
-                      p.id === idAlerta
-                        ? { ...p, estado: "normal", tipoAlerta: null }
-                        : p
-                    )
-                  )
-                }
-              />
-            ))}
-          </div>
-        )}
-      </div>
       <div className="seccion-contenido-dashboard">{renderizarContenido()}</div>
     </div>
   );
