@@ -6,7 +6,6 @@ import logoDinoStar from "../assets/Logo.png";
 import AlertaBanner from "../components/AlertaBanner";
 import echo from "../echo";
 import { getPacientes } from "../api/pacientes";
-import { getAlertasActivas } from "../services/alertas";
 import { analizarVolumen, numeroONulo } from "../utils/volumen";
 
 const DashboardContext = createContext();
@@ -168,31 +167,6 @@ function crearPacienteDesdeApi(pacienteDb) {
   };
 }
 
-
-function marcarAlertasActivas(pacientes, alertas) {
-  if (!Array.isArray(alertas) || alertas.length === 0) return pacientes;
-
-  return pacientes.map((paciente) => {
-    const camaPaciente = normalizarCama(paciente.cama);
-
-    const alerta = alertas.find((a) => {
-      const camaAlerta = normalizarCama(a.cama);
-      if (camaAlerta && camaPaciente && camaAlerta === camaPaciente) return true;
-      return a.sesion_id != null && Number(a.sesion_id) === Number(paciente.id);
-    });
-
-    if (!alerta) return paciente;
-
-    return {
-      ...paciente,
-      alertaId: alerta.id ?? paciente.alertaId,
-      estado: "alerta",
-      textoEstado: "ALERTA DE INFUSIÓN",
-      tipoAlerta: alerta.tipo ?? alerta.tipo_alerta ?? "ALERTA",
-    };
-  });
-}
-
 function crearPacienteDesdePaquete(pacienteDb, packet) {
   const gotasPorMin = numeroONulo(packet.gotasPorMin);
   const volRestante = numeroONulo(packet.volRestante);
@@ -278,8 +252,8 @@ export default function DashboardLayout({
       .map((parte) => parte[0])
       .join("");
 
-  const [pacientes, setPacientes] = useState([]);
 
+  const [pacientes, setPacientes] = useState([]);
   const [cargandoPacientes, setCargandoPacientes] = useState(true);
   const [errorPacientes, setErrorPacientes] = useState(null);
 
@@ -349,24 +323,16 @@ export default function DashboardLayout({
 
         catalogoRef.current = Array.isArray(pacientesDb) ? pacientesDb : [];
         catalogoListoRef.current = true;
-
         setPacientes(catalogoRef.current.map(crearPacienteDesdeApi));
         setErrorPacientes(null);
         setCargandoPacientes(false);
-
         const pendientes = pendientesRef.current;
         pendientesRef.current = [];
         pendientes.forEach(procesarPaquete);
 
-        try {
-          const alertas = await getAlertasActivas();
-          if (!activo) return;
-          setPacientes((prev) => marcarAlertasActivas(prev, alertas));
-        } catch (error) {
-          console.warn("No se pudieron cargar las alertas activas:", error);
-        }
       } catch (error) {
         if (!activo) return;
+
         catalogoRef.current = [];
         catalogoListoRef.current = true;
         pendientesRef.current = [];
@@ -378,6 +344,7 @@ export default function DashboardLayout({
     }
 
     cargarCatalogoPacientes();
+
 
     const pusher = echo.connector?.pusher;
     const alConectar = () => setWsConectado(true);
