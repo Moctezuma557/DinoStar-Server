@@ -134,7 +134,7 @@
   text-align: center;
 }
 
-.boton-registrar-paciente {
+.boton-alta {
   display: inline-flex;
   align-items: center;
   gap: var(--espacio-2);
@@ -150,7 +150,7 @@
   transition: background-color var(--transicion-rapida);
 }
 
-.boton-registrar-paciente:hover {
+.boton-alta:hover {
   background-color: #14294a;
 }
 

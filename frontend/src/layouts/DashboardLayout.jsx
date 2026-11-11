@@ -1,4 +1,4 @@
-import { useEffect, useState, createContext, useContext, useRef } from "react";
+import { useEffect, useState, createContext, useContext, useRef, useCallback } from "react";
 import { navigationItems } from "../config/navigation";
 import Icono from "../components/Icono";
 import styles from "./DashboardLayout.module.css";
@@ -227,6 +227,80 @@ function actualizarPacienteConPaquete(paciente, packet) {
   };
 }
 
+// Tarjeta inicial de un paciente que todavía no ha mandado lecturas.
+// Se reemplaza por datos reales cuando llega su primer paquete.
+function crearTarjetaBase(pacienteDb) {
+  const volTotal = Number(pacienteDb.vol_total) || 0;
+  const modoGoteo = pacienteDb.modo_goteo;
+
+  return {
+    id: pacienteDb.id,
+    alertaId: pacienteDb.id,
+    cama: pacienteDb.numero_cama,
+    pacienteId: pacienteDb.numero_cama,
+    nombre: pacienteDb.nombre,
+    sala: pacienteDb.sala,
+    idPaciente: `${pacienteDb.sala} • ID: ${pacienteDb.id}`,
+    enfermeraId: pacienteDb.enfermera_id,
+    gotasPorMin: 0,
+    flujoActual: 0,
+    estadoRitmo: modoGoteo === "MICRO_GOTEO" ? "Microgoteo" : "Macrogoteo",
+    metaFlujo: null,
+    porcentajeVolumen: 100,
+    volRestante: volTotal,
+    volTotal,
+    tiempoRestante: "Sin lecturas aún",
+    estado: "normal",
+    textoEstado: "ESPERANDO LECTURAS",
+    nombreSolucion: pacienteDb.tipo_solucion || "Solución sin registrar",
+    tipoBajante:
+      modoGoteo === "MICRO_GOTEO" ? "MICRO (60 GTT/ML)" : "NORMAL (20 GTT/ML)",
+    modoGoteo,
+    tipoAlerta: null,
+    horaAlerta: null,
+  };
+}
+
+// Copia a una tarjeta existente los datos "fijos" del paciente (los que
+// vienen de la BD), sin tocar las lecturas en vivo.
+function aplicarDatosDelCatalogo(tarjeta, pacienteDb) {
+  return {
+    ...tarjeta,
+    cama: pacienteDb.numero_cama,
+    pacienteId: pacienteDb.numero_cama,
+    nombre: pacienteDb.nombre,
+    sala: pacienteDb.sala,
+    idPaciente: `${pacienteDb.sala} • ID: ${pacienteDb.id}`,
+    enfermeraId: pacienteDb.enfermera_id,
+    nombreSolucion: pacienteDb.tipo_solucion || "Solución sin registrar",
+  };
+}
+
+// Alinea las tarjetas con el catálogo de la BD:
+// - actualiza nombre, cama y sala de las que ya existen,
+// - quita las de pacientes dados de baja,
+// - crea la tarjeta de los pacientes nuevos.
+function sincronizarTarjetas(tarjetas, catalogo) {
+  const porId = new Map(catalogo.map((p) => [p.id, p]));
+  const conTarjeta = new Set();
+  const resultado = [];
+
+  tarjetas.forEach((tarjeta) => {
+    const pacienteDb = porId.get(tarjeta.id);
+    if (!pacienteDb) return;
+    conTarjeta.add(tarjeta.id);
+    resultado.push(aplicarDatosDelCatalogo(tarjeta, pacienteDb));
+  });
+
+  catalogo.forEach((pacienteDb) => {
+    if (!conTarjeta.has(pacienteDb.id)) {
+      resultado.push(crearTarjetaBase(pacienteDb));
+    }
+  });
+
+  return resultado;
+}
+
 export default function DashboardLayout({
   title = "Panel Principal",
   activeItem = "panel",
@@ -254,6 +328,8 @@ export default function DashboardLayout({
 
 
   const [pacientes, setPacientes] = useState([]);
+  // Pacientes tal como los guarda la BD (incluye los que aún no tienen lecturas)
+  const [catalogo, setCatalogo] = useState([]);
   const [cargandoPacientes, setCargandoPacientes] = useState(true);
   const [errorPacientes, setErrorPacientes] = useState(null);
 
@@ -267,6 +343,25 @@ export default function DashboardLayout({
   const catalogoRef = useRef([]);
   const catalogoListoRef = useRef(false);
   const pendientesRef = useRef([]);
+
+  // Guarda el catálogo (para validar camas de los paquetes) y deja las
+  // tarjetas en pantalla alineadas con él.
+  const aplicarCatalogo = useCallback((lista) => {
+    catalogoRef.current = lista;
+    setCatalogo(lista);
+    setPacientes((prev) => sincronizarTarjetas(prev, lista));
+  }, []);
+
+  // Vuelve a pedir la lista al servidor. Se llama después de crear,
+  // editar o dar de baja, para que la pantalla refleje la BD al instante.
+  const refrescarPacientes = useCallback(async () => {
+    try {
+      const lista = await getPacientes();
+      aplicarCatalogo(Array.isArray(lista) ? lista : []);
+    } catch (error) {
+      console.error("Error al refrescar pacientes:", error);
+    }
+  }, [aplicarCatalogo]);
 
   const alertasActivas = pacientes.filter((p) => p.estado === "alerta");
   const cantidadAlertas = alertasActivas.length;
@@ -321,7 +416,7 @@ export default function DashboardLayout({
         const pacientesDb = await getPacientes();
         if (!activo) return;
 
-        catalogoRef.current = Array.isArray(pacientesDb) ? pacientesDb : [];
+        aplicarCatalogo(Array.isArray(pacientesDb) ? pacientesDb : []);
         catalogoListoRef.current = true;
         setPacientes(catalogoRef.current.map(crearPacienteDesdeApi));
         setErrorPacientes(null);
@@ -385,6 +480,18 @@ export default function DashboardLayout({
       }
     };
   }, []);
+
+  // Formato que usa el modal de alta para listar y editar pacientes
+  const catalogoPacientes = catalogo.map((p) => ({
+    id: p.id,
+    nombre: p.nombre,
+    cama: p.numero_cama,
+    sala: p.sala,
+    volTotal: Number(p.vol_total),
+    modoGoteo: p.modo_goteo,
+    solucion: p.tipo_solucion ?? "Sin solución registrada",
+    enfermeraId: p.enfermera_id,
+  }));
 
   return (
     <div className={styles.shell}>
@@ -516,6 +623,8 @@ export default function DashboardLayout({
             setPacientes,
             triggerAlerta,
             enfermera,
+            catalogoPacientes,
+            refrescarPacientes,
             cargandoPacientes,
             errorPacientes,
           }}
