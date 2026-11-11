@@ -94,6 +94,16 @@ function calcularPorcentaje(volRestante, volTotal) {
   return analizarVolumen(volRestante, volTotal).porcentaje;
 }
 
+function etiquetaRitmo(modoGoteo) {
+  return modoGoteo === "MICRO_GOTEO" ? "Microgoteo" : "Macrogoteo";
+}
+
+function etiquetaBajante(modoGoteo) {
+  return modoGoteo === "MICRO_GOTEO"
+    ? "MICRO (60 GTT/ML)"
+    : "NORMAL (20 GTT/ML)";
+}
+
 function calcularEstadoTarjeta(gotasPorMin, volRestante) {
   if (volRestante !== null && volRestante < 50) {
     return {
@@ -123,6 +133,40 @@ function calcularEstadoTarjeta(gotasPorMin, volRestante) {
   return { estado: "normal", textoEstado: "GOTEO REGULAR", tipoAlerta: null };
 }
 
+function crearPacienteDesdeApi(pacienteDb) {
+  const volTotal = numeroONulo(pacienteDb.vol_total);
+  const modoGoteo = pacienteDb.modo_goteo;
+
+  return {
+    id: pacienteDb.id,
+    alertaId: pacienteDb.id,
+    cama: pacienteDb.numero_cama,
+    pacienteId: pacienteDb.numero_cama,
+    nombre: pacienteDb.nombre,
+    sala: pacienteDb.sala,
+    idPaciente: `${pacienteDb.sala} • ID: ${pacienteDb.id}`,
+    enfermeraId: pacienteDb.enfermera_id,
+
+    gotasPorMin: null,
+    flujoActual: null,
+    volRestante: null,
+    tiempoRestante: null,
+    porcentajeVolumen: 0,
+
+    estadoRitmo: etiquetaRitmo(modoGoteo),
+    metaFlujo: null,
+    volTotal,
+    estado: "normal",
+    textoEstado: "ESPERANDO PRIMERA LECTURA",
+
+    nombreSolucion: pacienteDb.tipo_solucion || "Solución sin registrar",
+    tipoBajante: etiquetaBajante(modoGoteo),
+    modoGoteo,
+    tipoAlerta: null,
+    horaAlerta: null,
+  };
+}
+
 function crearPacienteDesdePaquete(pacienteDb, packet) {
   const gotasPorMin = numeroONulo(packet.gotasPorMin);
   const volRestante = numeroONulo(packet.volRestante);
@@ -141,7 +185,7 @@ function crearPacienteDesdePaquete(pacienteDb, packet) {
     enfermeraId: pacienteDb.enfermera_id,
     gotasPorMin,
     flujoActual: redondearFlujo(calcularFlujoMlH(gotasPorMin, modoGoteo)),
-    estadoRitmo: modoGoteo === "MICRO_GOTEO" ? "Microgoteo" : "Macrogoteo",
+    estadoRitmo: etiquetaRitmo(modoGoteo),
     metaFlujo: null,
     porcentajeVolumen: calcularPorcentaje(volRestante, volTotal),
     volRestante,
@@ -150,8 +194,7 @@ function crearPacienteDesdePaquete(pacienteDb, packet) {
     estado: infoEstado.estado,
     textoEstado: infoEstado.textoEstado,
     nombreSolucion: pacienteDb.tipo_solucion || "Solución sin registrar",
-    tipoBajante:
-      modoGoteo === "MICRO_GOTEO" ? "MICRO (60 GTT/ML)" : "NORMAL (20 GTT/ML)",
+    tipoBajante: etiquetaBajante(modoGoteo),
     modoGoteo,
     tipoAlerta: infoEstado.tipoAlerta,
     horaAlerta: infoEstado.tipoAlerta ? formatearHora(packet.timestamp) : null,
@@ -169,10 +212,9 @@ function actualizarPacienteConPaquete(paciente, packet) {
     ...paciente,
     gotasPorMin,
     flujoActual: redondearFlujo(calcularFlujoMlH(gotasPorMin, modoGoteo)),
-    estadoRitmo: modoGoteo === "MICRO_GOTEO" ? "Microgoteo" : "Macrogoteo",
+    estadoRitmo: etiquetaRitmo(modoGoteo),
     modoGoteo,
-    tipoBajante:
-      modoGoteo === "MICRO_GOTEO" ? "MICRO (60 GTT/ML)" : "NORMAL (20 GTT/ML)",
+    tipoBajante: etiquetaBajante(modoGoteo),
     porcentajeVolumen: calcularPorcentaje(volRestante, volTotal),
     volRestante,
     tiempoRestante: formatearTiempoRestante(packet.tiempoRestante),
@@ -210,8 +252,11 @@ export default function DashboardLayout({
       .map((parte) => parte[0])
       .join("");
 
-  // Estado global de pacientes
+
   const [pacientes, setPacientes] = useState([]);
+  const [cargandoPacientes, setCargandoPacientes] = useState(true);
+  const [errorPacientes, setErrorPacientes] = useState(null);
+
   const [wsConectado, setWsConectado] = useState(() => {
     const conexion = echo.connector?.pusher?.connection;
     return conexion ? conexion.state === "connected" : true;
@@ -225,8 +270,6 @@ export default function DashboardLayout({
 
   const alertasActivas = pacientes.filter((p) => p.estado === "alerta");
   const cantidadAlertas = alertasActivas.length;
-
-  // Referencia para rastrear si aumentó el número de alertas y abrir el banner automáticamente
   const prevCantidadRef = useRef(cantidadAlertas);
   useEffect(() => {
     if (cantidadAlertas > 0 && cantidadAlertas > prevCantidadRef.current) {
@@ -250,7 +293,6 @@ export default function DashboardLayout({
         (paciente) => normalizarCama(paciente.numero_cama) === camaRecibida
       );
 
-      // Solo se crean tarjetas para camas registradas en la BD.
       if (!pacienteEnDb) return;
 
       setPacientes((prevPacientes) => {
@@ -281,26 +323,29 @@ export default function DashboardLayout({
 
         catalogoRef.current = Array.isArray(pacientesDb) ? pacientesDb : [];
         catalogoListoRef.current = true;
-
-        // Procesar paquetes que llegaron mientras se cargaba el catálogo.
+        setPacientes(catalogoRef.current.map(crearPacienteDesdeApi));
+        setErrorPacientes(null);
+        setCargandoPacientes(false);
         const pendientes = pendientesRef.current;
         pendientesRef.current = [];
         pendientes.forEach(procesarPaquete);
+
       } catch (error) {
         if (!activo) return;
 
-        // Sin catálogo no se puede validar la cama; se descartan los paquetes
-        // para no acumularlos indefinidamente.
         catalogoRef.current = [];
         catalogoListoRef.current = true;
         pendientesRef.current = [];
+        setPacientes([]);
+        setErrorPacientes(error);
+        setCargandoPacientes(false);
         console.error("Error al cargar el catálogo de pacientes:", error);
       }
     }
 
     cargarCatalogoPacientes();
 
-    // Configuración y monitoreo de conexión de Laravel Reverb (WebSocket)
+
     const pusher = echo.connector?.pusher;
     const alConectar = () => setWsConectado(true);
     const alDesconectar = () => setWsConectado(false);
@@ -312,7 +357,6 @@ export default function DashboardLayout({
       pusher.connection.bind("connecting", alConectando);
     }
 
-    // Las tarjetas nacen con el primer paquete de una cama registrada en la BD.
     const channel = echo.channel("pacientes");
     const alRecibirLectura = (e) => {
       const rawData = e.datapacket || e.data || e;
@@ -388,7 +432,7 @@ export default function DashboardLayout({
             Sincronización: {sincronizacion}
           </span>
 
-          {/* Indicador visual de conexión WebSocket en la parte superior */}
+          {}
           <span
             className={`${styles.chip} ${wsConectado ? styles.chipWsConectado : styles.chipWsCaido}`}
             style={{
@@ -449,25 +493,33 @@ export default function DashboardLayout({
         </div>
       </header>
 
-      {/* Banner flotante renderizado a nivel global del Layout */}
+      {}
       {mostrarBanner && (
         <AlertaBanner
           alertas={alertasActivas}
-          enfermeraId={enfermera?.id ?? 1} // Ajusta según el ID de la enfermera en tu sesión
+          enfermeraId={enfermera?.id ?? 1} 
           onClose={() => setMostrarBanner(false)}
           onAlertaResuelta={(idAlertaResuelta) => {
-          // Cambia el estado local de la alerta para que desaparezca del banner y baje el contador
           setPacientes((prevPacientes) =>
-          prevPacientes.map((p) => 
+          prevPacientes.map((p) =>
             p.id === idAlertaResuelta ? { ...p, estado: "normal", tipoAlerta: null } : p
         )
       );
     }}
-  />    
+  />
       )}
 
       <main className={styles.content}>
-        <DashboardContext.Provider value={{ pacientes, setPacientes, triggerAlerta, enfermera }}>
+        <DashboardContext.Provider
+          value={{
+            pacientes,
+            setPacientes,
+            triggerAlerta,
+            enfermera,
+            cargandoPacientes,
+            errorPacientes,
+          }}
+        >
           {children}
         </DashboardContext.Provider>
       </main>
