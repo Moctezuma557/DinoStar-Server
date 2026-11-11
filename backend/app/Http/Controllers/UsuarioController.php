@@ -7,14 +7,17 @@ use App\Http\Requests\StoreUsuarioRequest;
 use App\Http\Requests\UpdateUsuarioRequest;
 use App\Http\Resources\UsuarioResource;
 use App\Models\User;
+use App\Services\AuditoriaService;
 use App\Services\GestionUsuarioService;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\DB;
 
 class UsuarioController extends Controller
 {
-    public function index(ListUsuarioRequest $request): AnonymousResourceCollection
+    public function index(ListUsuarioRequest $request, AuditoriaService $auditoria): AnonymousResourceCollection
     {
         $filters = $request->validated();
         $query = User::query();
@@ -28,7 +31,14 @@ class UsuarioController extends Controller
             $query->where('nombre', 'ilike', '%'.$name.'%');
         }
 
-        return UsuarioResource::collection($query->orderBy('nombre')->orderBy('id')->get());
+        $users = DB::transaction(function () use ($query, $auditoria): Collection {
+            $users = $query->orderBy('nombre')->orderBy('id')->get();
+            $auditoria->registrar('LISTAR', 'usuarios');
+
+            return $users;
+        });
+
+        return UsuarioResource::collection($users);
     }
 
     public function store(StoreUsuarioRequest $request, GestionUsuarioService $service): JsonResponse

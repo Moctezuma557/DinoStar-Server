@@ -3,12 +3,15 @@
 namespace App\Services;
 
 use App\Models\Paciente;
+use App\Models\Sesion;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class RegistroPacienteService
 {
+    public function __construct(private readonly AuditoriaService $auditoria) {}
+
     public function registrar(array $data): Paciente
     {
         return DB::transaction(function () use ($data): Paciente {
@@ -27,11 +30,12 @@ class RegistroPacienteService
                 'nombre' => $data['nombre'], 'numero_cama' => $data['numero_cama'],
                 'sala' => $data['sala'], 'activo' => true,
             ]);
-            $patient->sesiones()->create([
+            $session = $patient->sesiones()->create([
                 'enfermera_id' => $nurse->id, 'vol_total' => $data['vol_total'],
                 'modo_goteo' => $data['modo_goteo'], 'tipo_solucion' => $data['tipo_solucion'],
                 'estado' => 'ACTIVA', 'inicio' => now(),
             ]);
+            $this->auditar('CREAR', $patient, $session);
 
             return $patient->load('sesionActiva.lecturas');
         });
@@ -45,6 +49,7 @@ class RegistroPacienteService
                 $this->reservarCama($data['numero_cama'] ?? $patient->numero_cama, $patient->id);
             }
             $patient->update($data);
+            $this->auditar('ACTUALIZAR', $patient);
 
             return $patient;
         });
@@ -62,7 +67,20 @@ class RegistroPacienteService
             }
 
             $patient->update(['activo' => false]);
+            $this->auditar('BAJA_LOGICA', $patient, $session);
         });
+    }
+
+    private function auditar(string $accion, Paciente $patient, ?Sesion $session = null): void
+    {
+        $data = $patient->only(['nombre', 'numero_cama', 'sala', 'activo']);
+        if ($session !== null) {
+            $data['sesion'] = $session->only([
+                'id', 'enfermera_id', 'vol_total', 'modo_goteo', 'tipo_solucion', 'estado', 'inicio', 'fin',
+            ]);
+        }
+
+        $this->auditoria->registrar($accion, $patient->getTable(), $patient->id, $data);
     }
 
     private function pacienteActivoBloqueado(string $id): Paciente

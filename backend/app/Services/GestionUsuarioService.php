@@ -9,6 +9,8 @@ use Illuminate\Validation\ValidationException;
 
 class GestionUsuarioService
 {
+    public function __construct(private readonly AuditoriaService $auditoria) {}
+
     public function crear(array $data): User
     {
         abort_if($data['rol'] === 'ADMIN', 403, 'Por ahora los administradores se crean únicamente por seeder o base de datos.');
@@ -17,7 +19,10 @@ class GestionUsuarioService
             $this->validarTurno($data['rol'], $data['turno'] ?? null);
             $this->validarEmail($data['email']);
 
-            return User::create(array_replace(['activo' => true], $data));
+            $user = User::create(array_replace(['activo' => true], $data));
+            $this->auditar('CREAR', $user);
+
+            return $user;
         });
     }
 
@@ -38,6 +43,7 @@ class GestionUsuarioService
             }
             $user->fill($data)->save();
             $this->revocarTokensSiCorresponde($user);
+            $this->auditar('ACTUALIZAR', $user);
 
             return $user;
         });
@@ -52,6 +58,7 @@ class GestionUsuarioService
             $this->protegerUltimoAdministrador($user, $user->rol, false);
             if ($user->activo) {
                 $user->update(['activo' => false]);
+                $this->auditar('BAJA_LOGICA', $user);
             }
             $user->tokens()->delete();
         });
@@ -63,6 +70,16 @@ class GestionUsuarioService
         if (! $user->activo || $user->wasChanged(['password', 'rol'])) {
             $user->tokens()->delete();
         }
+    }
+
+    private function auditar(string $accion, User $user): void
+    {
+        $this->auditoria->registrar(
+            $accion,
+            $user->getTable(),
+            $user->id,
+            $user->only(['nombre', 'email', 'rol', 'turno', 'activo']),
+        );
     }
 
     private function bloquearAdministradores(): void
