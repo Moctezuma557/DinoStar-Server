@@ -1,7 +1,9 @@
 import { pedirJson } from "./api";
 import { adaptarLectura } from "./lecturas";
 
-function adaptarPaciente(crudo) {
+// Convierte el paciente que manda el backend (snake_case)
+// al formato que usa el frontend (camelCase).
+export function adaptarPaciente(crudo) {
   return {
     id: crudo.id,
     nombre: crudo.nombre,
@@ -65,14 +67,67 @@ export async function obtenerPacientes({ nombre, enfermeraId, signal } = {}) {
   return lista.map(adaptarPaciente);
 }
 
-/**
- * @param {string|number} id
- * @param {AbortSignal} signal
- */
 export async function obtenerPacientePorId({ id, signal } = {}) {
   const respuesta = await pedirJson(`/api/pacientes/${id}`, { signal });
 
   const crudo = respuesta?.data ?? respuesta;
 
   return adaptarDetalle(crudo);
+}
+
+export async function crearPaciente(datosPaciente) {
+  const respuesta = await pedirJson("/api/pacientes", {
+    method: "POST",
+    body: datosPaciente,
+  });
+  console.log("[crearPaciente] respuesta del backend:", respuesta);
+
+  const crudo = respuesta?.data ?? respuesta;
+  if (!crudo || Array.isArray(crudo) || crudo.id === undefined) {
+    throw new Error(
+      "El servidor no devolvió el paciente creado (llegó una lista). Revisa que pedirJson envíe el método POST y el body."
+    );
+  }
+  // El POST abre una sesión: los datos de la bolsa pueden venir dentro de `sesion`
+  const s = crudo.sesion ?? {};
+  return adaptarPaciente({
+    ...crudo,
+    vol_total: crudo.vol_total ?? s.vol_total,
+    modo_goteo: crudo.modo_goteo ?? s.modo_goteo,
+    tipo_solucion: crudo.tipo_solucion ?? s.tipo_solucion,
+    enfermera_id: crudo.enfermera_id ?? s.enfermera_id,
+  });
+}
+
+// El PATCH del backend SOLO acepta nombre, numero_cama y sala.
+// Los demás campos se ignoran y la respuesta solo trae esos mismos campos.
+export async function actualizarPaciente(id, datosActualizados) {
+  const { nombre, numero_cama, sala } = datosActualizados;
+  const respuesta = await pedirJson(`/api/pacientes/${id}`, {
+    method: "PATCH",
+    body: { nombre, numero_cama, sala },
+  });
+  console.log("[actualizarPaciente] respuesta del backend:", respuesta);
+
+  const crudo = respuesta?.data ?? respuesta;
+  if (!crudo || Array.isArray(crudo) || crudo.numero_cama === undefined) {
+    throw new Error(
+      "El servidor no confirmó la edición. Revisa que pedirJson envíe el método PATCH y el body."
+    );
+  }
+  // Devolvemos solo lo que cambió, para no pisar volTotal, solucion, etc.
+  return {
+    id: crudo.id,
+    nombre: crudo.nombre,
+    cama: crudo.numero_cama,
+    sala: crudo.sala,
+  };
+}
+
+export async function darDeBajaPaciente(id, finalizarSesion = true) {
+  await pedirJson(`/api/pacientes/${id}`, {
+    method: "DELETE",
+    body: { finalizar_sesion: finalizarSesion },
+  });
+  return true;
 }
