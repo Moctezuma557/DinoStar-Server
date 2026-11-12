@@ -8,7 +8,9 @@ use App\Http\Requests\UpdatePacienteRequest;
 use App\Http\Resources\PacienteResource;
 use App\Http\Resources\PacienteResumenResource;
 use App\Models\Paciente;
+use App\Services\AuditoriaService;
 use App\Services\RegistroPacienteService;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -17,7 +19,7 @@ use Illuminate\Support\Facades\DB;
 
 class PacienteController extends Controller
 {
-    public function index(ListPacienteRequest $request): AnonymousResourceCollection
+    public function index(ListPacienteRequest $request, AuditoriaService $auditoria): AnonymousResourceCollection
     {
         $filters = $request->validated();
         $query = Paciente::query()->where('activo', true)->with('sesionActiva')
@@ -34,7 +36,12 @@ class PacienteController extends Controller
 
         // MQTT locks the patient before replacing a session. Keep the eager load
         // in the same locked transaction so a session cannot disappear between queries.
-        $patients = DB::transaction(fn () => $query->orderBy('numero_cama')->orderBy('id')->sharedLock()->get());
+        $patients = DB::transaction(function () use ($query, $auditoria): Collection {
+            $patients = $query->orderBy('numero_cama')->orderBy('id')->sharedLock()->get();
+            $auditoria->registrar('LISTAR', 'pacientes');
+
+            return $patients;
+        });
 
         return PacienteResumenResource::collection($patients);
     }
@@ -47,12 +54,17 @@ class PacienteController extends Controller
             ->header('Location', route('pacientes.show', ['id' => $patient->id]));
     }
 
-    public function show(string $id): PacienteResource
+    public function show(string $id, AuditoriaService $auditoria): PacienteResource
     {
-        $patient = DB::transaction(fn () => Paciente::query()->where('activo', true)->whereHas('sesionActiva')
-            ->with(['sesionActiva.lecturas' => fn ($query) => $query->orderBy('timestamp_dispositivo')->orderBy('id')])
-            ->sharedLock()->find($id));
-        abort_if($patient === null, 404, 'Paciente no encontrado o sin sesión activa.');
+        $patient = DB::transaction(function () use ($id, $auditoria): Paciente {
+            $patient = Paciente::query()->where('activo', true)->whereHas('sesionActiva')
+                ->with(['sesionActiva.lecturas' => fn ($query) => $query->orderBy('timestamp_dispositivo')->orderBy('id')])
+                ->sharedLock()->find($id);
+            abort_if($patient === null, 404, 'Paciente no encontrado o sin sesión activa.');
+            $auditoria->registrar('CONSULTAR', $patient->getTable(), $patient->id);
+
+            return $patient;
+        });
 
         return new PacienteResource($patient);
     }

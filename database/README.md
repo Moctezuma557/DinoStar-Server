@@ -132,6 +132,116 @@ DINOSTAR_MIGRATION_TEST=1 php artisan test --compact tests/Feature/DomainMigrati
 
 Sin esa variable, las pruebas PostgreSQL se omiten; no confundir omision con exito.
 
+## Bajas lógicas y auditoría (B3, #116)
+
+- La baja de un paciente establece `activo = false`. Si hay una sesión activa
+  o pausada, se requiere `finalizar_sesion: true`. La baja cierra esa sesión y
+  registra su fecha de fin en la misma transacción. Se conservan las sesiones,
+  lecturas, alertas y asignaciones históricas.
+- La baja de un usuario establece `activo = false` y conserva sus relaciones e
+  historial. Se mantiene la protección del último administrador activo. Repetir
+  el `DELETE` de un usuario inactivo devuelve 204 sin un nuevo evento de baja.
+  Un cambio de `activo` mediante `PATCH` queda como `ACTUALIZAR`.
+- Las rutas B1 (`/api/pacientes`) y B2 (`/api/usuarios`) registran en
+  `logs_auditoria` los eventos `CREAR`, `ACTUALIZAR`, `BAJA_LOGICA`, `LISTAR`
+  y, para el detalle de paciente, `CONSULTAR`. El evento guarda la tabla, el ID
+  del registro cuando aplica y la fecha. En listados, `registro_id` es nulo.
+- Con `AUTH_PROTEGER_RUTAS=true`, K3 exige un token Bearer válido y el rol
+  autorizado. `usuario_id` identifica al usuario de ese token. Con las rutas
+  abiertas (`AUTH_PROTEGER_RUTAS=false`), las peticiones sin identidad
+  autenticada quedan con `usuario_id = NULL`. Los IDs que envía el cliente,
+  incluido `enfermera_id`, no acreditan quién hizo la petición.
+- `datos_nuevos` contiene el estado posterior de los campos permitidos. El alta
+  de paciente incluye su sesión inicial y la baja incluye la sesión si la cierra.
+  Las consultas guardan `datos_nuevos = NULL`. Los eventos excluyen contraseñas,
+  hashes y tokens. Las operaciones rechazadas quedan sin evento. Si falla la
+  escritura de auditoría, se revierte la operación en la misma transacción.
+
+El esquema existente cubre B3. `fk_logs_usuario` usa `ON DELETE RESTRICT` para
+proteger el historial del actor. `idx_logs_usuario`, `idx_logs_created_at` e
+`idx_logs_tabla_registro` cubren las búsquedas por actor, fecha y registro. La
+referencia al registro auditado usa el par `(tabla_afectada, registro_id)` porque
+puede apuntar a pacientes o usuarios. B3 no requiere una migración.
+
+### Comprobación en Windows y macOS
+
+Desde la raíz del repositorio, con Docker Desktop activo, construir el backend
+de prueba e iniciar una instancia PostgreSQL 15 temporal. El puerto 55432 solo
+se usa dentro del contenedor y la instancia no monta los volúmenes del proyecto.
+
+```text
+docker build -t dinostar-b3-test-backend ./backend
+docker run -d --name dinostar-b3-test-db --tmpfs /var/lib/postgresql/data -e POSTGRES_USER=postgres -e POSTGRES_DB=dinostar_issue22_test -e POSTGRES_PASSWORD=issue22-test-only --health-cmd "pg_isready -p 55432 -U postgres -d dinostar_issue22_test" --health-interval 2s --health-retries 15 postgres:15 -p 55432
+docker inspect --format '{{.State.Health.Status}}' dinostar-b3-test-db
+```
+
+Cuando el estado sea `healthy`, crear la base para las pruebas que usan
+`RefreshDatabase` y ejecutar la suite desde el contenedor PHP.
+
+```text
+docker exec dinostar-b3-test-db createdb -p 55432 -U postgres dinostar_test
+```
+
+#### Windows PowerShell
+
+```powershell
+$b3Root = (Get-Location).Path
+$b3PhpArgs = @(
+  'run', '--rm', '--network', 'container:dinostar-b3-test-db',
+  '--mount', "type=bind,source=$b3Root/backend/tests,target=/var/www/html/tests,readonly",
+  '--mount', "type=bind,source=$b3Root/database,target=/var/www/database,readonly",
+  '-e', 'APP_ENV=testing', '-e', 'DINOSTAR_MIGRATION_TEST=1',
+  '-e', 'APP_KEY=base64:MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=',
+  '-e', 'DB_URL=pgsql://postgres:issue22-test-only@127.0.0.1:55432/dinostar_test',
+  '--entrypoint', 'php', 'dinostar-b3-test-backend',
+  'vendor/bin/phpunit', '--do-not-cache-result'
+)
+docker @b3PhpArgs --filter 'AuditoriaApiTest|PacienteApiTest|UsuarioApiTest|DomainMigrationsTest|AuthApiTest|RutasProtegidasTest'
+docker @b3PhpArgs --filter AuditoriaK3SmokeTest
+```
+
+#### macOS (zsh o Bash)
+
+```bash
+b3_phpunit() {
+  docker run --rm --network container:dinostar-b3-test-db \
+    --mount "type=bind,source=$PWD/backend/tests,target=/var/www/html/tests,readonly" \
+    --mount "type=bind,source=$PWD/database,target=/var/www/database,readonly" \
+    -e APP_ENV=testing -e DINOSTAR_MIGRATION_TEST=1 \
+    -e APP_KEY=base64:MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY= \
+    -e DB_URL=pgsql://postgres:issue22-test-only@127.0.0.1:55432/dinostar_test \
+    --entrypoint php dinostar-b3-test-backend \
+    vendor/bin/phpunit --do-not-cache-result "$@"
+}
+b3_phpunit --filter 'AuditoriaApiTest|PacienteApiTest|UsuarioApiTest|DomainMigrationsTest|AuthApiTest|RutasProtegidasTest'
+b3_phpunit --filter AuditoriaK3SmokeTest
+```
+
+La primera ejecución verifica los CRUD, las bajas con historial, la integridad
+de las tablas migradas o adoptadas de `init.sql` y los permisos de K3.
+`AuditoriaK3SmokeTest` activa el modo protegido para probar la atribución con
+un token emitido por el login y la reversión de la revocación si falla la
+auditoría. La clave `APP_KEY` de los comandos se usa solo en estas pruebas.
+
+Para ejecutar `verify.sql` por separado, crear otra base dentro de la instancia
+temporal. En PowerShell asignar `$b3Root = (Get-Location).Path`. En macOS
+asignar `b3Root="$PWD"`. Después ejecutar estos comandos en cualquiera de los
+dos sistemas.
+
+```text
+docker exec dinostar-b3-test-db createdb -p 55432 -U postgres dinostar_b3_verify
+docker run --rm --network container:dinostar-b3-test-db --mount "type=bind,source=$b3Root/database,target=/sql,readonly" -e PGPASSWORD=issue22-test-only postgres:15 psql -h 127.0.0.1 -p 55432 -U postgres -d dinostar_b3_verify -v ON_ERROR_STOP=1 -f /sql/init.sql -f /sql/verify.sql -c '\d+ logs_auditoria'
+```
+
+El resultado esperado es 8 tablas, 9 claves foráneas y 10 rechazos esperados.
+El `ROLLBACK` retira los datos de prueba. Al terminar, eliminar solo el
+contenedor temporal de B3.
+
+```text
+docker stop dinostar-b3-test-db
+docker rm -v dinostar-b3-test-db
+```
+
 ## Datos demo (tarea #35)
 
 Desde la raiz del repositorio, con Docker encendido:
