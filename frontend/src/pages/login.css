@@ -1,17 +1,16 @@
 /* Definición de la paleta colores*/
 :root {
-  --color-primario: #5A9BD5;
-  --color-secundario: #1A365D;
-  --color-terciario: #10B981;
-  --color-neutral: #64748B;
-  --fondo-app: #F0F4F8;
-  --fondo-tarjeta: #FFFFFF;
+  --color-primario: #5a9bd5;
+  --color-secundario: #1a365d;
+  --color-terciario: #10b981;
+  --color-neutral: #64748b;
+  --fondo-app: #f0f4f8;
+  --fondo-tarjeta: #ffffff;
 }
-
 
 body {
   margin: 0;
-  font-family: 'Plus Jakarta Sans', sans-serif, system-ui;
+  font-family: "Plus Jakarta Sans", sans-serif, system-ui;
   background-color: var(--fondo-app);
 }
 
@@ -21,7 +20,6 @@ body {
   align-items: center;
   min-height: 100vh;
   padding: 16px;
-  
 }
 
 .tarjeta-login {
@@ -38,13 +36,12 @@ body {
 
 /* Panel Izquierdo*/
 .panel-izquierdo {
-  background: linear-gradient(135deg, #d2e4f6 0%, #E2E8F0 100%);
+  background: linear-gradient(135deg, #d2e4f6 0%, #e2e8f0 100%);
   padding: 50px 50px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
   text-align: left;
-  
 }
 
 .panel-izquierdo h1 {
@@ -86,7 +83,6 @@ body {
   margin: 0;
 }
 
-
 .grupo-input {
   margin-bottom: 16px;
 }
@@ -104,10 +100,10 @@ body {
 .grupo-input input {
   width: 100%;
   padding: 12px 14px;
-  border: 1px solid #E2E8F0;
+  border: 1px solid #e2e8f0;
   border-radius: 10px;
   font-size: 13px;
-  background-color: #F8FAFC;
+  background-color: #f8fafc;
   color: var(--color-secundario);
   box-sizing: border-box;
   outline: none;
@@ -151,7 +147,9 @@ body {
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
-  transition: background-color 0.2s ease, transform 0.1s ease;
+  transition:
+    background-color 0.2s ease,
+    transform 0.1s ease;
   /*box-shadow: 0 4px 10px rgba(90, 155, 213, 0.25);*/
 }
 
@@ -163,3 +161,36 @@ body {
   transform: scale(0.98);
 }
 
+.login-error {
+  margin: 0 0 4px;
+  padding: 10px 12px;
+  border: 1px solid #f6c9c4;
+  border-radius: 10px;
+  background: #fdf2f1;
+  color: #b91c1c;
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  font-weight: 600;
+}
+
+.login-nota-recordar {
+  margin: -6px 0 4px 26px;
+  font-size: 0.75rem;
+  color: #94a3b8;
+}
+
+.login-restaurando {
+  margin: auto;
+  color: #64748b;
+  font-size: 0.9375rem;
+}
+
+.formulario-login input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.boton-enviar:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
