@@ -142,8 +142,9 @@ class ReporteQueryService
     private function atencionesBase(array $filtros): Builder
     {
         return $this->rango(
-            $this->alertasBase($filtros)->join('atenciones_alerta as t', 't.alerta_id', '=', 'a.id'),
-            't.created_at',
+            $this->alertasBase($filtros)->join('atenciones_alerta as t', 't.alerta_id', '=', 'a.id')
+                ->where('t.resolvio', true),
+            'a.created_at',
             $filtros,
         );
     }

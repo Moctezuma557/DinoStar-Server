@@ -252,10 +252,11 @@ y los IDs negativos del seeder. Los filtros se combinan con AND. La sala se
 compara literalmente y la enfermera es la asignada a la sesión.
 
 El rango se aplica a `sesiones.inicio` para el total, las completadas y el
-historial; a `alertas.created_at` para las sesiones con alertas y las cantidades
-por categoría; y a `atenciones_alerta.created_at` para los promedios. Una sesión
-iniciada antes del rango puede generar alertas o recibir atenciones dentro de él.
-Una alerta creada antes del rango también puede recibir atención dentro de él.
+historial. Las sesiones con alertas, las cantidades por categoría y los
+promedios usan `alertas.created_at` para seleccionar la misma población de
+alertas. Una sesión iniciada antes del rango puede tener alertas dentro de él.
+Las atenciones resolutivas de esas alertas participan en los promedios incluso
+si se registraron después del rango.
 
 ### Contrato del servicio
 
@@ -278,12 +279,11 @@ Una alerta creada antes del rango también puede recibir atención dentro de él
   las de tipo `DESCONECTADO`. Por ello, los tres porcentajes pueden sumar menos
   de 100. La cantidad y el promedio usan las fechas indicadas arriba.
 - Todos los promedios son segundos, redondeados a dos decimales. Calculan
-  `AVG(atenciones_alerta.created_at - alertas.created_at)` sobre las atenciones
-  del rango. Cada atención participa, tanto resolutiva como no resolutiva.
-  Una alerta sin atención queda excluida del promedio. Si no hay atenciones,
-  el valor es `null`; una atención inmediata produce `0.0`. Las cantidades
-  cuentan alertas o sesiones distintas y conservan su valor cuando hay varias
-  atenciones o lecturas.
+  `AVG(atenciones_alerta.created_at - alertas.created_at)` usando únicamente
+  atenciones con `resolvio = true` de alertas creadas en el rango. Si ninguna
+  alerta tiene una atención resolutiva, el valor es `null`; una resolución
+  inmediata produce `0.0`. Las cantidades cuentan alertas o sesiones distintas
+  y conservan su valor cuando hay varias atenciones o lecturas.
 - `sesionesHistoricas($filtros)` devuelve un Query Builder para `get()`,
   `paginate()` o `cursor()`, ordenado por inicio e ID descendentes. Sus campos
   son `id`, `paciente_id`, `paciente`, `enfermera_id`, `enfermera`, `sala`,

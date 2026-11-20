@@ -92,19 +92,20 @@ class ReporteQueryServiceTest extends TestCase
                  WHERE created_at >= '2026-11-18T00:00:00Z' AND created_at < '2026-11-19T00:00:00Z') AS con_alertas,
                 (SELECT AVG(EXTRACT(EPOCH FROM (t.created_at - a.created_at)))
                  FROM atenciones_alerta t JOIN alertas a ON a.id = t.alerta_id
-                 WHERE t.created_at >= '2026-11-18T00:00:00Z' AND t.created_at < '2026-11-19T00:00:00Z') AS respuesta
+                 WHERE t.resolvio = TRUE AND a.created_at >= '2026-11-18T00:00:00Z'
+                 AND a.created_at < '2026-11-19T00:00:00Z') AS respuesta
             SQL);
         $this->assertSame(3, (int) $directo->total);
         $this->assertSame((int) $directo->total, $resultado['total_sesiones']);
         $this->assertSame((int) $directo->completadas, $resultado['sesiones_completadas']['cantidad']);
         $this->assertSame(66.67, $resultado['sesiones_completadas']['porcentaje']);
         $this->assertSame((int) $directo->con_alertas, $resultado['sesiones_con_alertas']);
-        $this->assertSame(217.5, $resultado['tiempo_promedio_respuesta']);
+        $this->assertSame(14470.0, $resultado['tiempo_promedio_respuesta']);
         $this->assertSame((float) $directo->respuesta, $resultado['tiempo_promedio_respuesta']);
         $this->assertSame([
-            ['tipo' => 'GOTEO_LENTO', 'cantidad' => 2, 'porcentaje' => 40.0, 'tiempo_promedio_resolucion' => 120.0],
-            ['tipo' => 'FIN_BOLSA', 'cantidad' => 0, 'porcentaje' => 0.0, 'tiempo_promedio_resolucion' => 600.0],
-            ['tipo' => 'GOTEO_RAPIDO', 'cantidad' => 2, 'porcentaje' => 40.0, 'tiempo_promedio_resolucion' => 30.0],
+            ['tipo' => 'GOTEO_LENTO', 'cantidad' => 2, 'porcentaje' => 40.0, 'tiempo_promedio_resolucion' => 180.0],
+            ['tipo' => 'FIN_BOLSA', 'cantidad' => 0, 'porcentaje' => 0.0, 'tiempo_promedio_resolucion' => null],
+            ['tipo' => 'GOTEO_RAPIDO', 'cantidad' => 2, 'porcentaje' => 40.0, 'tiempo_promedio_resolucion' => 21615.0],
         ], $this->reportes->alertasPorCategoria($filtros));
         $conteo = DB::selectOne("SELECT COUNT(*) AS total FROM alertas WHERE created_at >= '2026-11-18T00:00:00Z' AND created_at < '2026-11-19T00:00:00Z'");
         $this->assertSame(5, (int) $conteo->total);
@@ -119,14 +120,19 @@ class ReporteQueryServiceTest extends TestCase
         $this->assertSame(10, $this->reportes->resumen()['total_sesiones']);
     }
 
-    public function test_alerts_use_creation_date_and_responses_use_attention_date_independently_of_session_start(): void
+    public function test_alert_counts_and_resolution_averages_use_alert_creation_date_independently_of_session_start(): void
     {
         $this->escenario();
         $antigua = $this->reportes->resumen($this->dia() + ['paciente_id' => -35003]);
         $this->assertSame(0, $antigua['total_sesiones']);
         $this->assertSame(1, $antigua['sesiones_con_alertas']);
-        $this->assertNull($antigua['tiempo_promedio_respuesta']);
+        $this->assertSame(43200.0, $antigua['tiempo_promedio_respuesta']);
         $this->assertSame(0.0, $antigua['sesiones_completadas']['porcentaje']);
+        $this->assertSame(43200.0, $this->reportes->alertasPorCategoria($this->dia() + ['paciente_id' => -35003])[2]['tiempo_promedio_resolucion']);
+
+        $categorias = $this->reportes->alertasPorCategoria($this->dia() + ['paciente_id' => -35002]);
+        $this->assertSame(0, $categorias[1]['cantidad']);
+        $this->assertNull($categorias[1]['tiempo_promedio_resolucion']);
 
         $fuera = $this->reportes->resumen($this->dia() + ['paciente_id' => -35005]);
         $this->assertSame(1, $fuera['total_sesiones']);
@@ -155,10 +161,10 @@ class ReporteQueryServiceTest extends TestCase
     public static function filtros(): array
     {
         return [
-            'patient with legacy negative ID' => [['paciente_id' => '-35001'], 1, 1, 120.0, [-35001]],
-            'room' => [['sala' => 'Sala B'], 1, 1, 315.0, [-35002]],
-            'assigned nurse differs from attending nurse' => [['enfermera_id' => -12801], 1, 1, 315.0, [-35002]],
-            'all dimensions' => [['paciente_id' => -35002, 'sala' => 'Sala B', 'enfermera_id' => -12801], 1, 1, 315.0, [-35002]],
+            'patient with legacy negative ID' => [['paciente_id' => '-35001'], 1, 1, 180.0, [-35001]],
+            'room' => [['sala' => 'Sala B'], 1, 1, 30.0, [-35002]],
+            'assigned nurse differs from attending nurse' => [['enfermera_id' => -12801], 1, 1, 30.0, [-35002]],
+            'all dimensions' => [['paciente_id' => -35002, 'sala' => 'Sala B', 'enfermera_id' => -12801], 1, 1, 30.0, [-35002]],
             'inactive patient and nurse history' => [['paciente_id' => -35005, 'enfermera_id' => -35001], 1, 0, null, [-35005]],
             'unknown patient' => [['paciente_id' => 999999], 0, 0, null, []],
             'contradictory dimensions' => [['paciente_id' => -35001, 'sala' => 'Sala B'], 0, 0, null, []],
@@ -210,17 +216,26 @@ class ReporteQueryServiceTest extends TestCase
         $this->assertSame([], $this->reportes->auditoriaSesion(-35001, ['sala' => 'Sala B'])->get()->all());
     }
 
-    public function test_zero_response_is_a_number_and_no_attention_stays_null(): void
+    public function test_non_resolving_attention_keeps_average_null_and_immediate_resolution_is_zero(): void
     {
         $this->seedDemo();
         $this->alerta(-128001, -35001, 'FIN_BOLSA', '2026-11-19 12:00:00');
         DB::table('alertas')->where('id', -128001)->update(['resuelta' => true]);
         $this->assertNull($this->reportes->resumen()['tiempo_promedio_respuesta']);
+        $this->assertNull($this->reportes->alertasPorCategoria()[1]['tiempo_promedio_resolucion']);
         $this->atencion(-128001, '2026-11-19 12:00:00');
-        $this->assertSame(0.0, $this->reportes->resumen()['tiempo_promedio_respuesta']);
-        $this->assertSame(0.0, $this->reportes->alertasPorCategoria()[1]['tiempo_promedio_resolucion']);
+        $this->assertNull($this->reportes->resumen()['tiempo_promedio_respuesta']);
+        $this->assertNull($this->reportes->alertasPorCategoria()[1]['tiempo_promedio_resolucion']);
         $this->atencion(-128001, '2026-11-19 12:00:02.5', true);
+        $this->assertSame(2.5, $this->reportes->resumen()['tiempo_promedio_respuesta']);
+        $this->assertSame(2.5, $this->reportes->alertasPorCategoria()[1]['tiempo_promedio_resolucion']);
+
+        $this->alerta(-128002, -35002, 'FIN_BOLSA', '2026-11-19 12:01:00');
+        $this->atencion(-128002, '2026-11-19 12:01:00', true);
+        $this->assertSame(0.0, $this->reportes->resumen(['paciente_id' => -35002])['tiempo_promedio_respuesta']);
+        $this->assertSame(0.0, $this->reportes->alertasPorCategoria(['paciente_id' => -35002])[1]['tiempo_promedio_resolucion']);
         $this->assertSame(1.25, $this->reportes->resumen()['tiempo_promedio_respuesta']);
+        $this->assertSame(1.25, $this->reportes->alertasPorCategoria()[1]['tiempo_promedio_resolucion']);
     }
 
     public function test_date_limits_are_inclusive_and_use_the_application_timezone(): void
