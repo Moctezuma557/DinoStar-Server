@@ -69,6 +69,10 @@ Route::middleware([...$autenticado, ...$rol('ADMIN,ENFERMERA')])->group(function
     Route::get('/sesiones/{id}/lecturas', [SesionLecturaController::class, 'index'])
         ->where('id', '-?[0-9]{1,18}')->name('sesiones.lecturas.index');
 
+    Route::get('/sesiones/{id}/lecturas/serie', [SesionLecturaController::class, 'index'])
+        ->where('id', '-?[0-9]{1,18}')->name('sesiones.lecturas.serie')
+        ->defaults('serie', true);
+
     Route::get('/enfermeras', [EnfermeraController::class, 'index'])->name('enfermeras.index');
     Route::get('/enfermeras/{id}', [EnfermeraController::class, 'show'])->name('enfermeras.show');
 
