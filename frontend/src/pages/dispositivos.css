@@ -1,77 +1,269 @@
-/* Estilos específicos para la vista de Dispositivos (Hereda variables de paciente.css) */
+.registros-pagina {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-4, 16px);
+  padding: var(--espacio-5, 20px);
+}
 
-.fila-tabla-dispositivos {
+.registros-encabezado {
+  background: var(--color-superficie, #ffffff);
+  border: 1px solid var(--color-borde, #e3e9f2);
+  border-radius: var(--radio-lg, 14px);
+  box-shadow: var(--sombra-panel, 0 1px 3px rgba(26, 54, 93, 0.08));
+  padding: var(--espacio-5, 20px) var(--espacio-6, 24px);
+}
+
+.registros-encabezado-fila {
+  display: flex;
+  align-items: center;
+  gap: var(--espacio-3, 12px);
+  flex-wrap: wrap;
+}
+
+.registros-titulo {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: var(--peso-bold, 700);
+  color: var(--color-secundario, #1a365d);
+}
+
+.registros-subtitulo {
+  margin: var(--espacio-2, 8px) 0 0;
+  font-size: var(--texto-sm, 0.875rem);
+  color: var(--color-texto-tenue, #64748b);
+}
+
+/* ---------- Panel de la tabla ---------- */
+
+.registros-panel {
+  background: var(--color-superficie, #ffffff);
+  border: 1px solid var(--color-borde, #e3e9f2);
+  border-radius: var(--radio-lg, 14px);
+  box-shadow: var(--sombra-panel, 0 1px 3px rgba(26, 54, 93, 0.08));
+  overflow: hidden;
+}
+
+.registros-panel-cabecera {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--espacio-3, 12px);
+  padding: var(--espacio-4, 16px) var(--espacio-6, 24px);
+  border-bottom: 1px solid var(--color-borde, #e3e9f2);
+  background: var(--color-superficie-alt, #f8fafc);
+}
+
+.registros-panel-titulo {
+  font-size: var(--texto-xs, 0.75rem);
+  font-weight: var(--peso-bold, 700);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-texto-tenue, #64748b);
+}
+
+.registros-panel-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--espacio-2, 8px);
+}
+
+.registros-chip {
+  padding: 4px 12px;
+  border-radius: var(--radio-pildora, 999px);
+  background: var(--color-primario, #5a9bd5);
+  color: #ffffff;
+  font-size: var(--texto-xs, 0.75rem);
+  font-weight: var(--peso-semibold, 600);
+  white-space: nowrap;
+}
+
+.registros-chip--tenue {
+  background: var(--color-superficie, #ffffff);
+  border: 1px solid var(--color-borde, #e3e9f2);
+  color: var(--color-texto-tenue, #64748b);
+  font-weight: var(--peso-medio, 500);
+}
+
+.registros-tabla-envoltura {
+  overflow-x: auto;
+  max-height: 62vh;
+  overflow-y: auto;
+}
+
+.registros-tabla {
+  width: 100%;
+  min-width: 900px;
+  border-collapse: collapse;
+  font-size: var(--texto-sm, 0.875rem);
+}
+
+.registros-tabla thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--color-superficie-alt, #f8fafc);
+  border-bottom: 1px solid var(--color-borde, #e3e9f2);
+  padding: var(--espacio-3, 12px) var(--espacio-4, 16px);
+  text-align: left;
+  font-size: var(--texto-xs, 0.75rem);
+  font-weight: var(--peso-bold, 700);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--color-texto-tenue, #64748b);
+  white-space: nowrap;
+}
+
+.registros-tabla tbody td {
+  padding: var(--espacio-3, 12px) var(--espacio-4, 16px);
+  border-bottom: 1px solid var(--color-borde, #e3e9f2);
+  color: var(--color-texto, #334155);
+  vertical-align: middle;
+}
+
+.registros-tabla tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.registros-fila {
   cursor: pointer;
-  transition: background-color 0.15s ease;
+  transition: background-color var(--transicion-rapida, 0.15s ease);
 }
 
-.fila-tabla-dispositivos:hover td {
-  background-color: #f1f5f9 !important;
+.registros-fila:hover td {
+  background-color: var(--color-superficie-alt, #f1f5f9);
 }
 
-.celda-truncada {
-  max-width: 320px;
+.registros-celda-mensaje {
+  max-width: 420px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-/* Chips para distinguir tipos de logs de auditoría */
-.chip-tipo-log {
-  padding: 3px 10px;
-  border-radius: 999px;
-  font-size: 0.6875rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  background: #fef3c7;
-  color: #92400e;
-  display: inline-block;
+.registros-celda-fecha {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-texto-tenue, #64748b);
 }
 
-.chip-tipo-log.session_error,
-.chip-tipo-log.error {
+.registros-boton-id {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-primario, #5a9bd5);
+  font-weight: var(--peso-semibold, 600);
+  cursor: pointer;
+}
+
+.registros-boton-id:hover {
+  text-decoration: underline;
+}
+
+.registros-etiqueta {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: var(--radio-pildora, 999px);
+  font-size: var(--texto-xs, 0.75rem);
+  font-weight: var(--peso-bold, 700);
+  line-height: 1.5;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+
+.registros-etiqueta--alerta {
   background: #fee2e2;
   color: #991b1b;
+  border-color: #fca5a5;
 }
 
-.chip-tipo-log.data_inconsistency {
-  background: #eef2ff;
-  color: #3730a3;
+.registros-etiqueta--atencion {
+  background: #fef3c7;
+  color: #92400e;
+  border-color: #fcd34d;
 }
 
-/* Modal / Cuadro de Diálogo Estilizado */
-.modal-overlay-dispositivos {
+.registros-etiqueta--informativo {
+  background: #e0f2fe;
+  color: #075985;
+  border-color: #7dd3fc;
+}
+
+.registros-etiqueta--desconocido {
+  background: var(--color-superficie-alt, #f1f5f9);
+  color: var(--color-texto-tenue, #475569);
+  border-color: var(--color-borde, #cbd5e1);
+}
+
+.registros-aviso {
+  margin: 0;
+  padding: var(--espacio-8, 32px) var(--espacio-6, 24px);
+  text-align: center;
+  color: var(--color-texto-tenue, #64748b);
+  font-size: var(--texto-sm, 0.875rem);
+}
+
+.registros-aviso--error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--espacio-3, 12px);
+  color: var(--color-alerta, #991b1b);
+}
+
+.registros-boton {
+  padding: 8px 18px;
+  border: 1px solid var(--color-borde, #e3e9f2);
+  border-radius: var(--radio-md, 10px);
+  background: var(--color-superficie, #ffffff);
+  color: var(--color-secundario, #1a365d);
+  font-size: var(--texto-sm, 0.875rem);
+  font-weight: var(--peso-semibold, 600);
+  cursor: pointer;
+  transition: background-color var(--transicion-rapida, 0.15s ease);
+}
+
+.registros-boton:hover {
+  background: var(--color-superficie-alt, #f1f5f9);
+}
+
+.registros-boton:focus-visible,
+.registros-boton-id:focus-visible,
+.registros-modal-cerrar:focus-visible {
+  outline: 2px solid var(--color-primario, #5a9bd5);
+  outline-offset: 2px;
+}
+
+.registros-modal-fondo {
   position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
-  background-color: rgba(26, 54, 93, 0.4);
-  backdrop-filter: blur(3px);
+  inset: 0;
+  z-index: 1050;
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1050;
-  padding: 20px;
-  box-sizing: border-box;
+  padding: var(--espacio-5, 20px);
+  background: rgba(26, 54, 93, 0.45);
+  backdrop-filter: blur(3px);
 }
 
-.modal-card-dispositivos {
-  background: var(--fondo-tarjeta, #ffffff);
-  border-radius: 16px;
-  width: 100%;
-  max-width: 650px;
-  box-shadow: 0 20px 40px rgba(26, 54, 93, 0.15);
+.registros-modal {
   display: flex;
   flex-direction: column;
+  width: 100%;
+  max-width: 680px;
+  max-height: 85vh;
+  background: var(--color-superficie, #ffffff);
+  border-radius: var(--radio-lg, 16px);
+  box-shadow: 0 20px 40px rgba(26, 54, 93, 0.22);
   overflow: hidden;
-  animation: modalEntrada 0.2s ease-out;
+  animation: registros-modal-entrada 0.18s ease-out;
 }
 
-@keyframes modalEntrada {
+@keyframes registros-modal-entrada {
   from {
     opacity: 0;
-    transform: translateY(10px);
+    transform: translateY(8px);
   }
   to {
     opacity: 1;
@@ -79,87 +271,99 @@
   }
 }
 
-.modal-header-dispositivos {
-  padding: 18px 24px;
-  background: #f8fafc;
-  border-bottom: 1px solid #e3e9f2;
+@media (prefers-reduced-motion: reduce) {
+  .registros-modal {
+    animation: none;
+  }
+  .registros-fila {
+    transition: none;
+  }
+}
+
+.registros-modal-cabecera {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: var(--espacio-3, 12px);
+  padding: var(--espacio-4, 16px) var(--espacio-6, 24px);
+  border-bottom: 1px solid var(--color-borde, #e3e9f2);
+  background: var(--color-superficie-alt, #f8fafc);
 }
 
-.modal-header-dispositivos h3 {
+.registros-modal-cabecera h3 {
   margin: 0;
-  font-size: 1.125rem;
+  font-size: 1.0625rem;
+  font-weight: var(--peso-bold, 700);
   color: var(--color-secundario, #1a365d);
-  font-weight: 700;
 }
 
-.modal-close-btn {
+.registros-modal-cerrar {
   background: none;
   border: none;
+  padding: 0 4px;
   font-size: 1.5rem;
-  cursor: pointer;
-  color: var(--color-neutral, #64748b);
   line-height: 1;
+  cursor: pointer;
+  color: var(--color-texto-tenue, #64748b);
 }
 
-.modal-close-btn:hover {
+.registros-modal-cerrar:hover {
   color: var(--color-secundario, #1a365d);
 }
 
-.modal-body-dispositivos {
-  padding: 24px;
-  max-height: 65vh;
-  overflow-y: auto;
+.registros-modal-cuerpo {
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  font-size: 0.875rem;
-  color: #334155;
+  gap: var(--espacio-3, 12px);
+  padding: var(--espacio-6, 24px);
+  overflow-y: auto;
+  font-size: var(--texto-sm, 0.875rem);
+  color: var(--color-texto, #334155);
 }
 
-.modal-campo-info {
+.registros-campo {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--espacio-3, 12px);
   flex-wrap: wrap;
 }
 
-.modal-campo-info.bloque {
+.registros-campo--bloque {
   flex-direction: column;
   align-items: flex-start;
-  gap: 6px;
+  gap: var(--espacio-2, 8px);
 }
 
-.caja-texto-resaltada {
-  width: 100%;
-  background: #f8fafc;
-  border: 1px solid #e3e9f2;
-  border-radius: 8px;
-  padding: 10px 14px;
-  font-family: inherit;
-  font-size: 0.8125rem;
-  box-sizing: border-box;
+.registros-campo-etiqueta {
+  min-width: 128px;
+  font-size: var(--texto-xs, 0.75rem);
+  font-weight: var(--peso-bold, 700);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-texto-tenue, #64748b);
 }
 
-.caja-json-resaltada {
+.registros-campo-valor {
+  font-variant-numeric: tabular-nums;
+}
+
+.registros-caja-mensaje {
   width: 100%;
-  background: #0f172a;
-  color: #38bdf8;
-  border-radius: 8px;
-  padding: 12px;
-  font-family: monospace;
-  font-size: 0.75rem;
-  overflow-x: auto;
-  box-sizing: border-box;
   margin: 0;
+  padding: var(--espacio-3, 12px) var(--espacio-4, 16px);
+  background: var(--color-superficie-alt, #f8fafc);
+  border: 1px solid var(--color-borde, #e3e9f2);
+  border-radius: var(--radio-md, 8px);
+  box-sizing: border-box;
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.55;
 }
 
-.modal-footer-dispositivos {
-  padding: 16px 24px;
-  background: #f8fafc;
-  border-top: 1px solid #e3e9f2;
+.registros-modal-pie {
   display: flex;
   justify-content: flex-end;
+  padding: var(--espacio-4, 16px) var(--espacio-6, 24px);
+  border-top: 1px solid var(--color-borde, #e3e9f2);
+  background: var(--color-superficie-alt, #f8fafc);
 }

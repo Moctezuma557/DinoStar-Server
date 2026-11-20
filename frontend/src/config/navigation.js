@@ -20,7 +20,7 @@
   },
   {
     id: "dispositivos",
-    label: "Dispositivos",
+    label: "Registros del sistema",
     to: "/dispositivos",
     icono: "monitor",
   },
