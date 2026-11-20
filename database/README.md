@@ -242,6 +242,87 @@ docker stop dinostar-b3-test-db
 docker rm -v dinostar-b3-test-db
 ```
 
+## Consultas para reportes (B1, #128)
+
+`App\Services\ReporteQueryService` centraliza los datos que consumen K1, K2 y
+la exportación. Admite `desde` y `hasta` en formato `YYYY-MM-DD`,
+`paciente_id`, `sala` y `enfermera_id`. Los días de ambos extremos se incluyen
+en la zona `app.timezone` (UTC en este proyecto). Se permiten extremos abiertos
+y los IDs negativos del seeder. Los filtros se combinan con AND. La sala se
+compara literalmente y la enfermera es la asignada a la sesión.
+
+El rango se aplica a `sesiones.inicio` para el total, las completadas y el
+historial. Las sesiones con alertas, las cantidades por categoría y los
+promedios usan `alertas.created_at` para seleccionar la misma población de
+alertas. Una sesión iniciada antes del rango puede tener alertas dentro de él.
+Las atenciones resolutivas de esas alertas participan en los promedios incluso
+si se registraron después del rango.
+
+### Contrato del servicio
+
+- `resumen($filtros)` devuelve exactamente cuatro campos. Las completadas
+  agrupan su cantidad y porcentaje en el mismo objeto.
+
+  ```json
+  {
+    "total_sesiones": 0,
+    "sesiones_completadas": {"cantidad": 0, "porcentaje": 0.0},
+    "sesiones_con_alertas": 0,
+    "tiempo_promedio_respuesta": null
+  }
+  ```
+
+- `alertasPorCategoria($filtros)` devuelve tres filas en el orden
+  `GOTEO_LENTO`, `FIN_BOLSA`, `GOTEO_RAPIDO`. Cada fila tiene `tipo`,
+  `cantidad`, `porcentaje` y `tiempo_promedio_resolucion`. La cantidad cuenta
+  alertas y el porcentaje usa todas las alertas creadas en el rango, incluidas
+  las de tipo `DESCONECTADO`. Por ello, los tres porcentajes pueden sumar menos
+  de 100. La cantidad y el promedio usan las fechas indicadas arriba.
+- Todos los promedios son segundos, redondeados a dos decimales. Calculan
+  `AVG(atenciones_alerta.created_at - alertas.created_at)` usando únicamente
+  atenciones con `resolvio = true` de alertas creadas en el rango. Si ninguna
+  alerta tiene una atención resolutiva, el valor es `null`; una resolución
+  inmediata produce `0.0`. Las cantidades cuentan alertas o sesiones distintas
+  y conservan su valor cuando hay varias atenciones o lecturas.
+- `sesionesHistoricas($filtros)` devuelve un Query Builder para `get()`,
+  `paginate()` o `cursor()`, ordenado por inicio e ID descendentes. Sus campos
+  son `id`, `paciente_id`, `paciente`, `enfermera_id`, `enfermera`, `sala`,
+  `numero_cama`, `inicio`, `fin`, `duracion_segundos`, `tipo_solucion`,
+  `vol_total`, `numero_alertas` y `estado`. El número de alertas abarca toda
+  la sesión. La duración usa fin menos inicio y queda nula si falta fin.
+  El historial incluye pacientes y usuarios dados de baja. La ubicación
+  corresponde a la sala y cama actuales del paciente, que son las disponibles
+  en el esquema.
+- `auditoriaSesion($sesionId, $filtros)` devuelve un Query Builder ordenado por
+  hora e ID de alerta y atención. Incluye `id`, `sesion_id`, `tipo`, `hora`,
+  `descripcion`, `resuelta`, `atencion_id`, `atendida_por_id`, `atendida_por`,
+  `fecha_atencion`, `resolvio` y `tiempo_respuesta` en segundos. Hay una fila
+  por atención y una fila con los campos de atención nulos por cada alerta
+  sin atender. El rango selecciona las alertas por su fecha de creación y la
+  consulta muestra sus atenciones completas.
+
+### Índices y verificación
+
+La migración `2026_11_19_144249_add_reportes_indexes.php` agrega índices de
+`sesiones(inicio, id)`, `alertas(created_at, sesion_id)`,
+`atenciones_alerta(created_at, alerta_id)` y `pacientes(sala, id)`.
+Los índices anteriores ya cubren las claves foráneas y las lecturas por sesión
+y timestamp. El índice parcial de camas activas no cubre la sala del historial
+de pacientes inactivos. La migración nueva conserva los índices y restricciones
+anteriores, y su `down` retira únicamente los cuatro índices de reportes.
+
+La protección de `dinostar_schema_adoptions` sigue impidiendo eliminar las ocho
+tablas adoptadas de `init.sql`. `ReporteQueryServiceTest` contrasta los totales
+del seeder con SQL directo, cubre varias atenciones por alerta, filtros
+combinados y límites de fecha, y comprueba el up/down con conservación de datos.
+También intenta revertir las tablas adoptadas y verifica que se bloquee.
+
+Para comprobar #128 en Windows o macOS, usar la instancia PostgreSQL aislada
+descrita en la sección de B3 y ejecutar PHPUnit con
+`DINOSTAR_MIGRATION_TEST=1` y el filtro
+`ReporteQueryServiceTest|DomainMigrationsTest`. Las pruebas de #128 crean
+y eliminan una base propia por caso dentro de esa instancia.
+
 ## Datos demo (tarea #35)
 
 Desde la raiz del repositorio, con Docker encendido:
