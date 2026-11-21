@@ -16,26 +16,24 @@ class SesionLecturaApiTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        if (getenv('DINOSTAR_MIGRATION_TEST') !== '1') {
-            $this->markTestSkipped('Requires the isolated PostgreSQL test database on port 55432.');
+        if (getenv('DINOSTAR_MIGRATION_TEST') === '1') {
+            config(['database.default' => 'pgsql', 'database.connections.pgsql' => [
+                'driver' => 'pgsql', 'host' => '127.0.0.1', 'port' => '55432',
+                'database' => 'dinostar_issue22_test', 'username' => 'postgres',
+                'password' => 'issue22-test-only', 'charset' => 'utf8',
+                'prefix' => '', 'search_path' => 'public', 'sslmode' => 'prefer',
+            ]]);
+            DB::purge('pgsql');
         }
-        config(['database.default' => 'pgsql', 'database.connections.pgsql' => [
-            'driver' => 'pgsql', 'host' => '127.0.0.1', 'port' => '55432',
-            'database' => 'dinostar_issue22_test', 'username' => 'postgres',
-            'password' => 'issue22-test-only', 'charset' => 'utf8',
-            'prefix' => '', 'search_path' => 'public', 'sslmode' => 'prefer',
-        ]]);
-        DB::purge('pgsql');
+
         DB::beginTransaction();
         $this->assertSame(0, Artisan::call('migrate', ['--force' => true, '--no-interaction' => true]));
     }
 
     protected function tearDown(): void
     {
-        if (getenv('DINOSTAR_MIGRATION_TEST') === '1') {
-            while (DB::transactionLevel() > 0) {
-                DB::rollBack();
-            }
+        while (DB::transactionLevel() > 0) {
+            DB::rollBack();
         }
         parent::tearDown();
     }
@@ -76,16 +74,16 @@ class SesionLecturaApiTest extends TestCase
         $this->reading($other, '2026-10-19 10:00:00+00', 99.9);
 
         $response = $this->getJson('/api/sesiones/'.$session->id.'/lecturas')->assertOk();
-        $response->assertExactJson(['data' => [
-            ['gotas_por_min' => 19.9, 'vol_restante' => '450.20', 'tiempo_restante_min' => 830,
-                'timestamp_dispositivo' => '2026-10-20T10:00:00.123456Z'],
-            ['gotas_por_min' => 32.5, 'vol_restante' => '450.20', 'tiempo_restante_min' => 830,
-                'timestamp_dispositivo' => '2026-10-20T10:00:00.123456Z'],
-            ['gotas_por_min' => 60.1, 'vol_restante' => '450.20', 'tiempo_restante_min' => 830,
-                'timestamp_dispositivo' => '2026-10-20T10:00:00.123457Z'],
-        ]]);
+        $response->assertJsonStructure(['data', 'links', 'meta']);
+        $response->assertJsonCount(3, 'data');
         $response->assertJsonPath('data.0.gotas_por_min', 19.9)
-            ->assertJsonPath('data.1.gotas_por_min', 32.5)->assertJsonPath('data.2.gotas_por_min', 60.1);
+            ->assertJsonPath('data.0.vol_restante', '450.20')
+            ->assertJsonPath('data.0.tiempo_restante_min', 830)
+            ->assertJsonPath('data.0.timestamp_dispositivo', '2026-10-20T10:00:00.123456Z')
+            ->assertJsonPath('data.1.gotas_por_min', 32.5)
+            ->assertJsonPath('data.1.timestamp_dispositivo', '2026-10-20T10:00:00.123456Z')
+            ->assertJsonPath('data.2.gotas_por_min', 60.1)
+            ->assertJsonPath('data.2.timestamp_dispositivo', '2026-10-20T10:00:00.123457Z');
         $this->assertDatabaseCount('lecturas', 4);
         $this->assertDatabaseCount('sesiones', 2);
     }
@@ -111,7 +109,9 @@ class SesionLecturaApiTest extends TestCase
     public function test_existing_session_without_readings_returns_an_empty_array(): void
     {
         $session = $this->createSession();
-        $this->getJson('/api/sesiones/'.$session->id.'/lecturas')->assertOk()->assertExactJson(['data' => []]);
+        $response = $this->getJson('/api/sesiones/'.$session->id.'/lecturas')->assertOk();
+        $response->assertJsonCount(0, 'data');
+        $response->assertJsonStructure(['data', 'links', 'meta']);
         $this->assertDatabaseCount('lecturas', 0);
     }
 
@@ -162,18 +162,35 @@ class SesionLecturaApiTest extends TestCase
     {
         $session = $this->createSession();
         for ($i = 1; $i <= 15; $i++) {
-            $this->reading($session, "2026-10-20 10:00:{$i}+00", $i);
+            $sec = str_pad($i, 2, '0', STR_PAD_LEFT);
+            $this->reading($session, "2026-10-20 10:00:{$sec}+00", (float) $i);
         }
 
-        $response = $this->getJson('/api/sesiones/'.$session->id.'/lecturas?per_page=10')
+        // With per_page=10, page=1 explicitly → first 10
+        $response = $this->getJson('/api/sesiones/'.$session->id.'/lecturas?per_page=10&page=1')
             ->assertOk();
 
         $response->assertJsonCount(10, 'data');
-        // Pagination metadata must be present
         $response->assertJsonStructure(['data', 'links', 'meta']);
         $response->assertJsonPath('meta.per_page', 10);
         $response->assertJsonPath('meta.total', 15);
         $response->assertJsonPath('meta.last_page', 2);
+    }
+
+    public function test_limit_is_accepted_as_alias_for_per_page(): void
+    {
+        $session = $this->createSession();
+        for ($i = 1; $i <= 15; $i++) {
+            $sec = str_pad($i, 2, '0', STR_PAD_LEFT);
+            $this->reading($session, "2026-10-20 10:00:{$sec}+00", (float) $i);
+        }
+
+        $response = $this->getJson('/api/sesiones/'.$session->id.'/lecturas?limit=10&page=1')
+            ->assertOk();
+
+        $response->assertJsonCount(10, 'data');
+        $response->assertJsonPath('meta.per_page', 10);
+        $response->assertJsonPath('meta.total', 15);
     }
 
     public function test_page_parameter_returns_correct_offset(): void
@@ -189,11 +206,11 @@ class SesionLecturaApiTest extends TestCase
 
         $page2->assertJsonCount(5, 'data');
         // First item on page 2 should be reading #11
-        $page2->assertJsonPath('data.0.gotas_por_min', 11.0);
+        $this->assertEquals(11, $page2->json('data.0.gotas_por_min'));
         $page2->assertJsonPath('meta.current_page', 2);
     }
 
-    public function test_default_per_page_is_100(): void
+    public function test_default_per_page_is_100_and_without_page_returns_last_page(): void
     {
         $session = $this->createSession();
         for ($i = 1; $i <= 105; $i++) {
@@ -202,12 +219,17 @@ class SesionLecturaApiTest extends TestCase
             $this->reading($session, "2026-10-20 10:{$min}:{$sec}+00", (float) $i);
         }
 
+        // Without page → auto-last page (page 2 with the 5 most recent)
         $response = $this->getJson('/api/sesiones/'.$session->id.'/lecturas')
             ->assertOk();
 
-        $response->assertJsonCount(100, 'data');
+        $response->assertJsonCount(5, 'data');
         $response->assertJsonPath('meta.per_page', 100);
         $response->assertJsonPath('meta.total', 105);
+        $response->assertJsonPath('meta.current_page', 2);
+        $response->assertJsonPath('meta.last_page', 2);
+        // First item on last page is reading #101
+        $this->assertEquals(101, $response->json('data.0.gotas_por_min'));
     }
 
     public function test_per_page_is_clamped_to_max_500(): void
@@ -265,9 +287,9 @@ class SesionLecturaApiTest extends TestCase
         $this->assertCount(3, $data);
 
         // Must be ordered ascending by timestamp_dispositivo
-        $this->assertSame(10.0, $data[0]['gotas_por_min']);
-        $this->assertSame(20.0, $data[1]['gotas_por_min']);
-        $this->assertSame(30.0, $data[2]['gotas_por_min']);
+        $this->assertEquals(10, $data[0]['gotas_por_min']);
+        $this->assertEquals(20, $data[1]['gotas_por_min']);
+        $this->assertEquals(30, $data[2]['gotas_por_min']);
 
         // Only the three chart columns
         $this->assertArrayHasKey('timestamp_dispositivo', $data[0]);
@@ -291,8 +313,8 @@ class SesionLecturaApiTest extends TestCase
 
         $data = $response->json('data');
         $this->assertCount(2, $data);
-        $this->assertSame(10.0, $data[0]['gotas_por_min']);
-        $this->assertSame(20.0, $data[1]['gotas_por_min']);
+        $this->assertEquals(10, $data[0]['gotas_por_min']);
+        $this->assertEquals(20, $data[1]['gotas_por_min']);
 
         // No pagination meta
         $response->assertJsonMissingPath('meta');

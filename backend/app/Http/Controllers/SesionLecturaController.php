@@ -14,9 +14,9 @@ class SesionLecturaController extends Controller
      * GET /api/sesiones/{id}/lecturas
      *
      * Query parameters:
-     *   per_page  int (1–500, default 100) — max rows per page
-     *   page      int (≥1, default 1)
-     *   serie     1|true — return lightweight time-series payload (no pagination wrapper)
+     *   per_page|limit  int (1–500, default 100) — max rows per page
+     *   page            int (≥1) — omit to auto-select the last page (most recent readings)
+     *   serie           1|true — return lightweight time-series payload (no pagination wrapper)
      */
     public function index(Request $request, string $id): AnonymousResourceCollection|JsonResponse
     {
@@ -42,14 +42,26 @@ class SesionLecturaController extends Controller
         }
 
         // ── Paginated mode (default) ────────────────────────────────
-        $perPage = min((int) $request->input('per_page', 100), 500);
-        $perPage = max($perPage, 1);
+        // Accept both per_page and limit (limit wins as fallback for per_page).
+        $raw = $request->input('per_page', $request->input('limit'));
+        $perPage = $raw !== null && is_numeric($raw) ? (int) $raw : 100;
+        $perPage = max(1, min($perPage, 500));
 
         // History remains available for paused and completed sessions as well.
-        $paginator = $session->lecturas()
+        $query = $session->lecturas()
             ->orderBy('timestamp_dispositivo')
-            ->orderBy('id')
-            ->paginate($perPage);
+            ->orderBy('id');
+
+        // Without an explicit page, jump to the LAST page so the frontend
+        // always sees the most recent readings (the live panel reads the
+        // last item of the array as the current reading).
+        $page = $request->integer('page') ?: null;
+        if ($page === null) {
+            $total = (clone $query)->count();
+            $page = max(1, (int) ceil($total / $perPage));
+        }
+
+        $paginator = $query->paginate($perPage, ['*'], 'page', $page);
 
         return LecturaResource::collection($paginator);
     }
