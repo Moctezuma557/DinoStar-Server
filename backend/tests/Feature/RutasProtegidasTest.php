@@ -35,6 +35,7 @@ class RutasProtegidasTest extends TestCase
         $ambos = ['ADMIN', 'ENFERMERA'];
 
         return [
+            'GET exportar reporte' => ['GET', '/api/reportes/exportar', $ambos],
             'GET usuarios' => ['GET', '/api/usuarios', $admin],
             'POST usuarios' => ['POST', '/api/usuarios', $admin],
             'PATCH usuarios' => ['PATCH', '/api/usuarios/1', $admin],

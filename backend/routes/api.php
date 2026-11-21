@@ -5,6 +5,7 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\EnfermeraController;
 use App\Http\Controllers\LogDispositivoController;
 use App\Http\Controllers\PacienteController;
+use App\Http\Controllers\ReporteController;
 use App\Http\Controllers\SesionController;
 use App\Http\Controllers\SesionLecturaController;
 use App\Http\Controllers\UsuarioController;
@@ -57,6 +58,8 @@ Route::middleware([...$autenticado, ...$rol('ENFERMERA')])->group(function () {
 
 // --- ADMIN o ENFERMERA ------------------------------------------------------
 Route::middleware([...$autenticado, ...$rol('ADMIN,ENFERMERA')])->group(function () {
+    Route::get('/reportes/exportar', [ReporteController::class, 'exportar'])->name('reportes.exportar');
+
     Route::get('/pacientes', [PacienteController::class, 'index'])->name('pacientes.index');
     Route::post('/pacientes', [PacienteController::class, 'store'])->name('pacientes.store');
     Route::get('/pacientes/{id}', [PacienteController::class, 'show'])
