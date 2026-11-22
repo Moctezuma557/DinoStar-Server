@@ -1,5 +1,55 @@
 # DinoStar: Laravel y Reverb (actividad #6)
 
+## Exportación PDF de reportes (B2, #135)
+
+`GET /api/reportes/exportar` descarga un PDF con `Content-Type: application/pdf`
+y `Content-Disposition: attachment; filename="dinostar-reporte-AAAAMMDD-HHMMSS.pdf"`.
+El documento incluye los cuatro KPIs de B1, las categorías `GOTEO_LENTO`,
+`FIN_BOLSA` y `GOTEO_RAPIDO`, y todas las sesiones históricas que coinciden con
+los filtros, ordenadas por inicio descendente. No se limita a la página visible
+de la tabla web.
+
+Filtros opcionales, según el contrato del corte 5:
+
+| Parámetro | Valor |
+| --- | --- |
+| `fecha_inicio` | Día inicial inclusivo, `YYYY-MM-DD`. |
+| `fecha_fin` | Día final inclusivo, `YYYY-MM-DD`; no puede preceder al inicial. |
+| `paciente_id` | ID de tabla del paciente, incluidos los IDs negativos del seeder. |
+| `sala` | Nombre exacto de la sala, hasta 50 caracteres. |
+| `enfermera_id` | ID de la enfermera asignada a la sesión. |
+
+Ejemplo: `/api/reportes/exportar?fecha_inicio=2026-11-01&fecha_fin=2026-11-21&sala=Sala%20A`.
+Los filtros se combinan con AND. Ausentes o vacíos no restringen el resultado.
+La exportación traduce `fecha_inicio`/`fecha_fin` a `desde`/`hasta` y reutiliza
+`ReporteQueryService`; los días usan `app.timezone`, indicada en el documento.
+Se mantienen los promedios solo con `resolvio=true`, el rango por fecha de la
+alerta y el denominador de porcentajes que incluye todas las categorías.
+Los promedios se muestran en segundos y las duraciones de sesiones en minutos;
+un promedio nulo se representa con `—`.
+
+Sin coincidencias devuelve HTTP 200 y un PDF con el mensaje
+"No se encontraron sesiones con los filtros seleccionados". Los filtros
+inválidos devuelven HTTP 422 en JSON. Con `AUTH_PROTEGER_RUTAS=true`, exige
+token Bearer de un usuario activo `ADMIN` o `ENFERMERA`, igual que las demás
+rutas de consulta del proyecto. La descarga no modifica datos ni conserva
+copias del PDF en el servidor.
+
+La dependencia `barryvdh/laravel-dompdf` se instala desde `composer.lock`.
+Tras actualizar la rama, reconstruir el backend desde la raíz del repositorio:
+
+```bash
+docker compose up -d --build --no-deps --wait backend
+```
+
+La base de datos debe estar levantada para que el healthcheck termine.
+`ReporteApiTest` cubre la descarga real, los filtros, la validación, el estado
+vacío, la exportación de varias páginas y la conservación de los datos.
+`RutasProtegidasTest` incluye la ruta en su matriz de autenticación y roles.
+Las pruebas de PDF requieren `DINOSTAR_MIGRATION_TEST=1` y el PostgreSQL aislado
+de pruebas en el puerto interno 55432, con las credenciales de las pruebas de B1;
+cada caso crea y elimina su propia base `dinostar135_*`.
+
 ## API de pacientes (actividad #68)
 
 Consultar [API_PACIENTES.md](API_PACIENTES.md) para el contrato, comandos Windows/macOS/Linux, pruebas aisladas y validación con MQTT. La [colección Postman](pacientes.postman_collection.json) incluye alta, listado, filtros, detalle y errores esperados.
