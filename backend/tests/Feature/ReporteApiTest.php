@@ -29,14 +29,22 @@ class ReporteApiTest extends TestCase
         $this->proteccionAnterior = $_SERVER['AUTH_PROTEGER_RUTAS'] ?? null;
         $_SERVER['AUTH_PROTEGER_RUTAS'] = 'false';
         parent::setUp();
-        if (getenv('DINOSTAR_MIGRATION_TEST') !== '1') {
-            $this->markTestSkipped('Requires isolated PostgreSQL on port 55432.');
+        // Con DINOSTAR_MIGRATION_TEST=1 se usa la instancia dedicada (puerto 55432). Sin la
+        // variable se usa el servidor PostgreSQL de la conexión por defecto (el servicio
+        // `database` de docker compose): solo se le pide crear y borrar una base temporal,
+        // así que `dinostar_rex` y sus datos nunca se tocan.
+        if (getenv('DINOSTAR_MIGRATION_TEST') === '1') {
+            $connection = [
+                'driver' => 'pgsql', 'host' => '127.0.0.1', 'port' => '55432',
+                'database' => 'postgres', 'username' => 'postgres', 'password' => 'issue22-test-only',
+                'charset' => 'utf8', 'prefix' => '', 'search_path' => 'public', 'sslmode' => 'prefer',
+            ];
+        } else {
+            $connection = config('database.connections.pgsql');
+            if (($connection['driver'] ?? null) !== 'pgsql') {
+                $this->markTestSkipped('Requires a PostgreSQL default connection.');
+            }
         }
-        $connection = [
-            'driver' => 'pgsql', 'host' => '127.0.0.1', 'port' => '55432',
-            'database' => 'postgres', 'username' => 'postgres', 'password' => 'issue22-test-only',
-            'charset' => 'utf8', 'prefix' => '', 'search_path' => 'public', 'sslmode' => 'prefer',
-        ];
         config(['database.connections.reportes_pdf_admin' => $connection]);
         $this->database = 'dinostar135_'.bin2hex(random_bytes(8));
         DB::connection('reportes_pdf_admin')->statement('CREATE DATABASE "'.$this->database.'"');
@@ -111,6 +119,193 @@ class ReporteApiTest extends TestCase
             $this->assertStringContainsString($texto, $html);
         }
         $this->assertStringNotContainsString('Paciente PDF C', $html);
+    }
+
+    // ---------------------------------------------------------------------
+    // K1: GET /api/reportes/resumen y GET /api/reportes/alertas-categoria
+    // ---------------------------------------------------------------------
+
+    public function test_resumen_coincide_con_un_conteo_sql_directo_para_el_mismo_rango(): void
+    {
+        $this->escenario();
+
+        $directo = DB::selectOne(<<<'SQL'
+            SELECT
+                (SELECT COUNT(*) FROM sesiones
+                 WHERE inicio >= '2026-11-20T00:00:00Z' AND inicio < '2026-11-21T00:00:00Z') AS total,
+                (SELECT COUNT(*) FROM sesiones WHERE estado = 'FINALIZADA'
+                 AND inicio >= '2026-11-20T00:00:00Z' AND inicio < '2026-11-21T00:00:00Z') AS completadas,
+                (SELECT COUNT(DISTINCT sesion_id) FROM alertas
+                 WHERE created_at >= '2026-11-20T00:00:00Z' AND created_at < '2026-11-21T00:00:00Z') AS con_alertas,
+                (SELECT AVG(EXTRACT(EPOCH FROM (t.created_at - a.created_at)))
+                 FROM atenciones_alerta t JOIN alertas a ON a.id = t.alerta_id
+                 WHERE t.resolvio = TRUE AND a.created_at >= '2026-11-20T00:00:00Z'
+                 AND a.created_at < '2026-11-21T00:00:00Z') AS respuesta
+            SQL);
+
+        $datos = $this->reporte('resumen', ['fecha_inicio' => '2026-11-20', 'fecha_fin' => '2026-11-20'])
+            ->assertOk()->json('data');
+
+        $this->assertSame((int) $directo->total, $datos['total_sesiones']);
+        $this->assertSame((int) $directo->completadas, $datos['sesiones_completadas']['cantidad']);
+        $this->assertSame(round($directo->completadas * 100 / $directo->total, 2), $datos['sesiones_completadas']['porcentaje']);
+        $this->assertSame((int) $directo->con_alertas, $datos['sesiones_con_alertas']);
+        $this->assertSame(round((float) $directo->respuesta, 2), $datos['tiempo_promedio_respuesta']);
+    }
+
+    public function test_resumen_devuelve_exactamente_los_campos_del_contrato_de_b1(): void
+    {
+        $this->escenario();
+
+        $respuesta = $this->reporte('resumen', ['fecha_inicio' => '2026-11-20', 'fecha_fin' => '2026-11-20'])
+            ->assertOk()->assertHeader('Content-Type', 'application/json');
+
+        // Sin KPIs extra: nada de sesiones interrumpidas, meta 90 %, % vs mes anterior ni ciclo promedio.
+        $this->assertSame([
+            'data' => [
+                'total_sesiones' => 2,
+                'sesiones_completadas' => ['cantidad' => 1, 'porcentaje' => 50.0],
+                'sesiones_con_alertas' => 3,
+                'tiempo_promedio_respuesta' => 43245.0,
+            ],
+        ], $respuesta->json());
+        // El porcentaje conserva el decimal (50.0 y no 50) para que V1 reciba siempre un float.
+        $this->assertStringContainsString('"porcentaje":50.0', $respuesta->getContent());
+    }
+
+    public function test_alertas_categoria_calcula_el_porcentaje_sobre_todas_las_alertas_incluida_desconectado(): void
+    {
+        $this->escenario();
+
+        $respuesta = $this->reporte('alertas-categoria', ['fecha_inicio' => '2026-11-20', 'fecha_fin' => '2026-11-20'])
+            ->assertOk();
+
+        // 4 alertas en el rango (una es DESCONECTADO): los tres tipos suman 75 %, no se fuerza el 100 %.
+        $this->assertSame(['data' => [
+            ['tipo' => 'GOTEO_LENTO', 'cantidad' => 1, 'porcentaje' => 25.0, 'tiempo_promedio_resolucion' => 90.0],
+            ['tipo' => 'FIN_BOLSA', 'cantidad' => 1, 'porcentaje' => 25.0, 'tiempo_promedio_resolucion' => 86400.0],
+            ['tipo' => 'GOTEO_RAPIDO', 'cantidad' => 1, 'porcentaje' => 25.0, 'tiempo_promedio_resolucion' => null],
+        ]], $respuesta->json());
+        $this->assertSame(75.0, array_sum(array_column($respuesta->json('data'), 'porcentaje')));
+        $this->assertSame(4, (int) DB::selectOne(
+            "SELECT COUNT(*) AS total FROM alertas WHERE created_at >= '2026-11-20T00:00:00Z' AND created_at < '2026-11-21T00:00:00Z'",
+        )->total);
+    }
+
+    public function test_alertas_categoria_suma_100_cuando_no_hay_alertas_desconectado(): void
+    {
+        $this->escenario();
+        DB::table('alertas')->where('tipo', 'DESCONECTADO')->delete();
+
+        $categorias = $this->reporte('alertas-categoria', ['fecha_inicio' => '2026-11-20', 'fecha_fin' => '2026-11-20'])
+            ->assertOk()->json('data');
+
+        $this->assertSame([1, 1, 1], array_column($categorias, 'cantidad'));
+        $this->assertEqualsWithDelta(100.0, array_sum(array_column($categorias, 'porcentaje')), 0.02);
+    }
+
+    public function test_un_rango_sin_datos_devuelve_ceros_y_null_sin_error(): void
+    {
+        $this->escenario();
+        $vacio = ['fecha_inicio' => '2020-01-01', 'fecha_fin' => '2020-01-31'];
+
+        $resumen = $this->reporte('resumen', $vacio)->assertOk();
+        $this->assertSame(['data' => [
+            'total_sesiones' => 0,
+            'sesiones_completadas' => ['cantidad' => 0, 'porcentaje' => 0.0],
+            'sesiones_con_alertas' => 0,
+            'tiempo_promedio_respuesta' => null,
+        ]], $resumen->json());
+        $this->assertStringContainsString('"tiempo_promedio_respuesta":null', $resumen->getContent());
+
+        $categorias = $this->reporte('alertas-categoria', $vacio)->assertOk();
+        $this->assertSame(['data' => [
+            ['tipo' => 'GOTEO_LENTO', 'cantidad' => 0, 'porcentaje' => 0.0, 'tiempo_promedio_resolucion' => null],
+            ['tipo' => 'FIN_BOLSA', 'cantidad' => 0, 'porcentaje' => 0.0, 'tiempo_promedio_resolucion' => null],
+            ['tipo' => 'GOTEO_RAPIDO', 'cantidad' => 0, 'porcentaje' => 0.0, 'tiempo_promedio_resolucion' => null],
+        ]], $categorias->json());
+        $this->assertStringContainsString('"porcentaje":0.0', $categorias->getContent());
+    }
+
+    public function test_una_base_vacia_tampoco_devuelve_error(): void
+    {
+        $this->reporte('resumen')->assertOk()->assertJsonPath('data.total_sesiones', 0)
+            ->assertJsonPath('data.tiempo_promedio_respuesta', null);
+        $this->reporte('alertas-categoria')->assertOk()->assertJsonCount(3, 'data');
+    }
+
+    public static function filtrosK1(): array
+    {
+        $dia = ['fecha_inicio' => '2026-11-20', 'fecha_fin' => '2026-11-20'];
+
+        return [
+            'sin filtros' => [[], 3, 2, 3, 5, [1, 2, 1], 43245.0],
+            'rango de un dia' => [$dia, 2, 1, 3, 4, [1, 1, 1], 43245.0],
+            'paciente con id negativo' => [$dia + ['paciente_id' => -13501], 1, 1, 1, 1, [1, 0, 0], 90.0],
+            'sala' => [['sala' => 'Sala PDF B'], 1, 1, 1, 2, [0, 1, 0], 86400.0],
+            'enfermera' => [$dia + ['enfermera_id' => -13502], 1, 0, 1, 1, [0, 0, 1], null],
+            'combinados sin coincidencias' => [['paciente_id' => -13501, 'sala' => 'Sala PDF B'], 0, 0, 0, 0, [0, 0, 0], null],
+            'los cinco filtros' => [$dia + ['paciente_id' => -13501, 'sala' => 'Sala PDF A', 'enfermera_id' => -13501], 1, 1, 1, 1, [1, 0, 0], 90.0],
+            'vacios sin filtro' => [['fecha_inicio' => '', 'fecha_fin' => '', 'paciente_id' => '', 'sala' => '', 'enfermera_id' => ''], 3, 2, 3, 5, [1, 2, 1], 43245.0],
+        ];
+    }
+
+    #[DataProvider('filtrosK1')]
+    public function test_los_cinco_filtros_se_aplican_a_resumen_y_a_alertas_categoria(
+        array $filtros,
+        int $total,
+        int $completadas,
+        int $conAlertas,
+        int $alertasDelRango,
+        array $cantidades,
+        ?float $respuesta,
+    ): void {
+        $this->escenario();
+
+        $resumen = $this->reporte('resumen', $filtros)->assertOk()->json('data');
+        $this->assertSame($total, $resumen['total_sesiones']);
+        $this->assertSame($completadas, $resumen['sesiones_completadas']['cantidad']);
+        $this->assertSame($conAlertas, $resumen['sesiones_con_alertas']);
+        $this->assertSame($respuesta, $resumen['tiempo_promedio_respuesta']);
+
+        $categorias = $this->reporte('alertas-categoria', $filtros)->assertOk()->json('data');
+        $this->assertSame(['GOTEO_LENTO', 'FIN_BOLSA', 'GOTEO_RAPIDO'], array_column($categorias, 'tipo'));
+        $this->assertSame($cantidades, array_column($categorias, 'cantidad'));
+        foreach ($categorias as $categoria) {
+            $esperado = $alertasDelRango === 0 ? 0.0 : round($categoria['cantidad'] * 100 / $alertasDelRango, 2);
+            $this->assertSame($esperado, $categoria['porcentaje'], $categoria['tipo']);
+        }
+    }
+
+    #[DataProvider('filtrosInvalidos')]
+    public function test_los_filtros_invalidos_de_los_reportes_json_devuelven_422(array $filtros, string $campo): void
+    {
+        $this->reporte('resumen', $filtros)->assertUnprocessable()->assertJsonValidationErrors($campo);
+        $this->reporte('alertas-categoria', $filtros)->assertUnprocessable()->assertJsonValidationErrors($campo);
+    }
+
+    public function test_los_reportes_json_son_de_solo_lectura(): void
+    {
+        $this->escenario();
+        $tablas = ['usuarios', 'pacientes', 'sesiones', 'alertas', 'atenciones_alerta', 'logs_auditoria'];
+        $antes = [];
+        foreach ($tablas as $tabla) {
+            $antes[$tabla] = DB::table($tabla)->orderBy('id')->get()->toJson();
+        }
+
+        $this->reporte('resumen')->assertOk();
+        $this->reporte('alertas-categoria')->assertOk();
+        $this->postJson('/api/reportes/resumen')->assertStatus(405);
+        $this->postJson('/api/reportes/alertas-categoria')->assertStatus(405);
+
+        foreach ($tablas as $tabla) {
+            $this->assertSame($antes[$tabla], DB::table($tabla)->orderBy('id')->get()->toJson(), $tabla);
+        }
+    }
+
+    private function reporte(string $ruta, array $filtros = []): TestResponse
+    {
+        return $this->getJson('/api/reportes/'.$ruta.'?'.http_build_query($filtros));
     }
 
     public static function filtros(): array

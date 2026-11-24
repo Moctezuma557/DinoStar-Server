@@ -23,17 +23,17 @@ class DemoSeeder extends Seeder
         DB::transaction(function (): void {
             DB::select('SELECT pg_advisory_xact_lock(350035)');
             $now = now()->startOfSecond();
-            
+
             // 1. Insertar usuario demo (enfermera)
             $this->insertDemo('usuarios', -35001, [
-                'email' => 'enfermera@dinostar.com', 
+                'email' => 'enfermera@dinostar.com',
                 'nombre' => 'Enfermera Demo',
             ], [
                 'password' => Hash::driver('bcrypt')->make('password'),
-                'rol' => 'ENFERMERA', 
-                'turno' => 'MATUTINO', 
+                'rol' => 'ENFERMERA',
+                'turno' => 'MATUTINO',
                 'activo' => true,
-                'created_at' => $now, 
+                'created_at' => $now,
                 'updated_at' => $now,
             ]);
 
@@ -42,11 +42,11 @@ class DemoSeeder extends Seeder
                 $suffix = sprintf('%02d', $number);
                 $this->insertDemo('pacientes', -35000 - $number, [
                     'nombre' => 'Paciente '.$suffix,
-                    'numero_cama' => 'cama-'.$suffix, 
+                    'numero_cama' => 'cama-'.$suffix,
                     'sala' => 'Sala A',
                 ], [
-                    'activo' => true, 
-                    'created_at' => $now, 
+                    'activo' => true,
+                    'created_at' => $now,
                     'updated_at' => $now,
                 ]);
             }
@@ -64,15 +64,15 @@ class DemoSeeder extends Seeder
 
                 // Insertar sesión activa vinculada a su respectivo paciente
                 $this->insertDemo('sesiones', $sessionId, [
-                    'paciente_id' => $patientId, 
+                    'paciente_id' => $patientId,
                     'enfermera_id' => -35001,
                     'modo_goteo' => $mode,
                 ], [
-                    'vol_total' => $volume, 
-                    'estado' => 'ACTIVA', 
+                    'vol_total' => $volume,
+                    'estado' => 'ACTIVA',
                     'inicio' => $now,
-                    'fin' => null, 
-                    'created_at' => $now, 
+                    'fin' => null,
+                    'created_at' => $now,
                     'updated_at' => $now,
                 ]);
 
@@ -89,7 +89,7 @@ class DemoSeeder extends Seeder
                     $this->insertDemo('lecturas', -35000 - (($number - 1) * 5 + $index + 1), [
                         'sesion_id' => $sessionId,
                     ], [
-                        'gotas_por_min' => $drops, 
+                        'gotas_por_min' => $drops,
                         'vol_restante' => $remaining,
                         'tiempo_restante_min' => (int) ceil(($remaining * $dropFactor) / $drops),
                         'timestamp_dispositivo' => CarbonImmutable::parse($session->inicio)->addSeconds($index),
