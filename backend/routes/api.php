@@ -87,3 +87,9 @@ Route::middleware([...$autenticado, ...$rol('ADMIN,ENFERMERA')])->group(function
 
     Route::get('/alertas', [AlertaController::class, 'index'])->name('alertas.index');
 });
+
+Route::middleware([...$autenticado, ...$rol('ADMIN,ENFERMERA')])->group(function () {
+    Route::get('/reportes/resumen', [ReporteController::class, 'resumen'])->name('reportes.resumen');
+    Route::get('/reportes/alertas-categoria', [ReporteController::class, 'alertasCategoria'])
+        ->name('reportes.alertas-categoria');
+});
