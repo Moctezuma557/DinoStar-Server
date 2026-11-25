@@ -29,30 +29,23 @@ class ReporteController extends Controller
     public function exportar(ExportarReporteRequest $request, ReporteQueryService $reportes): Response
     {
         $filtros = $request->filtros();
-        $pdf = Pdf::loadView('reportes.pdf', [
-            'reporte' => $reportes->paraPdf($filtros),
+        $generado = now();
+        
+        return Pdf::loadView('reportes.pdf', [
             'filtros' => $filtros,
-            'generadoEn' => now()->format('Y-m-d H:i:s'),
-        ])->setPaper('letter', 'portrait');
-
-        $contenido = $pdf->output();
-
-        return response($contenido, 200, [
-            'Content-Type' => 'application/pdf',
-            'Content-Disposition' => 'attachment; filename="reporte-infusion.pdf"',
-            'Content-Length' => strlen($contenido),
+            'generado' => $generado,
+            'resumen' => $reportes->resumen($filtros),
+            'categorias' => $reportes->alertasPorCategoria($filtros),
+            'sesiones' => $reportes->sesionesHistoricas($filtros)->get(),
+        ])->setPaper('a4', 'landscape')->setOptions([
+            'defaultFont' => 'DejaVu Sans',
+            'isFontSubsettingEnabled' => true,
+            'isRemoteEnabled' => false,
+            'isPhpEnabled' => false,
+            'isJavascriptEnabled' => false,
+       ])->download('dinostar-reporte-'.$generado->format('Ymd-His').'.pdf')->withHeaders([
+            'Cache-Control' => 'private, no-store',
             'X-Content-Type-Options' => 'nosniff',
         ]);
-    }
-
-    /**
-     * JSON_PRESERVE_ZERO_FRACTION mantiene 50.0 como número decimal (no 50) y así el
-     * contrato de B1 con V1 conserva el tipo; los promedios sin datos salen como null.
-     *
-     * @param  array<mixed>  $datos
-     */
-    private function datos(array $datos): JsonResponse
-    {
-        return response()->json(['data' => $datos], 200, [], JSON_PRESERVE_ZERO_FRACTION);
     }
 }

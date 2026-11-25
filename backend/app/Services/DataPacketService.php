@@ -2,11 +2,11 @@
 
 namespace App\Services;
 
-use App\Events\NuevaLectura;
-use App\Models\LogDispositivo;
 use App\Models\Paciente;
-use App\Models\Sesion; // Importamos el modelo de logs de dispositivos
+use App\Models\Sesion;
 use App\Models\User;
+use App\Models\LogDispositivo; // Importamos el modelo de logs de dispositivos
+use App\Events\NuevaLectura;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -26,12 +26,10 @@ class DataPacketService
             $packets = json_decode($message, false, 512, JSON_THROW_ON_ERROR);
         } catch (JsonException) {
             Log::warning('[MqttListen] JSON inválido; mensaje descartado.', ['topic' => $topic]);
-
             return;
         }
         if (! is_array($packets)) {
             Log::warning('[MqttListen] Se esperaba una lista de DataPackets.', ['topic' => $topic]);
-
             return;
         }
         Log::info('[MqttListen] Lote recibido.', ['topic' => $topic, 'paquetes' => count($packets)]);
@@ -39,7 +37,6 @@ class DataPacketService
             $context = ['topic' => $topic, 'indice' => $index];
             if (! $packet instanceof stdClass) {
                 Log::warning('[MqttListen] DataPacket inválido; se esperaba un objeto.', $context);
-
                 continue;
             }
             try {
@@ -87,10 +84,10 @@ class DataPacketService
             $simulation = $this->validarSimulacion($simulation);
         }
 
-        $result = DB::transaction(function () use ($data): ?array {
+        $result = DB::transaction(function () use ($data, $simulation): ?array {
             $patients = Paciente::query()->where('numero_cama', $data['pacienteId'])
                 ->where('activo', true)->lockForUpdate()->get();
-
+            
             // 1. Cama ambigua
             if ($patients->count() > 1) {
                 Log::warning('[DataPacketService] Cama ambigua; no se guardaron datos.', ['pacienteId' => $data['pacienteId']]);
@@ -107,7 +104,7 @@ class DataPacketService
 
             $session = $patients->isEmpty() ? null : Sesion::query()
                 ->where('paciente_id', $patients->first()->id)->where('estado', 'ACTIVA')->lockForUpdate()->first();
-
+            
             // 2. Sesión inexistente
             if ($session === null) {
                 Log::warning('[DataPacketService] No hay sesión activa para: '.$data['pacienteId']);
@@ -130,9 +127,9 @@ class DataPacketService
                 Log::info('[DataPacketService] Ajustando modo de sesión activo al recibido por el dispositivo.', [
                     'sesion_id' => $session->id,
                     'modo_anterior' => $session->modo_goteo,
-                    'modo_nuevo' => $data['modo'],
+                    'modo_nuevo' => $data['modo']
                 ]);
-
+                
                 $session->update(['modo_goteo' => $data['modo']]);
 
                 LogDispositivo::create([
@@ -167,6 +164,7 @@ class DataPacketService
             foreach ($alerts as $type => $message) {
                 $session->alertas()->create(['tipo' => $type, 'mensaje' => $message, 'resuelta' => false]);
 
+                
             }
 
             return ['lectura_id' => $reading->id, 'sesion_id' => $session->id, 'alertas' => array_keys($alerts)];

@@ -31,7 +31,7 @@ class MqttPacketProcessor
             return;
         }
 
-        if (! is_array($packets)) {
+        if (!is_array($packets)) {
             Log::warning('[MqttListen] Se esperaba una lista de DataPackets.', ['topic' => $topic]);
 
             // Registrar paquete que no es lista en la BD
@@ -48,8 +48,8 @@ class MqttPacketProcessor
 
         foreach ($packets as $index => $packet) {
             $context = ['topic' => $topic, 'indice' => $index];
-
-            if (! $packet instanceof stdClass) {
+            
+            if (!$packet instanceof stdClass) {
                 Log::warning('[MqttListen] DataPacket inválido; se esperaba un objeto.', $context);
 
                 // Registrar paquete inválido (no es objeto) en la BD
@@ -76,7 +76,7 @@ class MqttPacketProcessor
                 LogDispositivo::create([
                     'tipo' => 'error',
                     'categoria' => 'packet',
-                    'mensaje' => 'Validación fallida: '.json_encode($exception->errors()),
+                    'mensaje' => 'Validación fallida: ' . json_encode($exception->errors()),
                     'numero_cama' => $numeroCama,
                 ]);
             } catch (Throwable $exception) {
@@ -85,7 +85,7 @@ class MqttPacketProcessor
                 LogDispositivo::create([
                     'tipo' => 'error',
                     'categoria' => 'packet',
-                    'mensaje' => 'Error inesperado al procesar paquete: '.$exception->getMessage(),
+                    'mensaje' => 'Error inesperado al procesar paquete: ' . $exception->getMessage(),
                     'numero_cama' => $numeroCama,
                 ]);
             }
