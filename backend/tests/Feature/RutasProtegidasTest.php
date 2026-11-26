@@ -57,7 +57,8 @@ class RutasProtegidasTest extends TestCase
             'GET lecturas' => ['GET', '/api/sesiones/1/lecturas', $ambos],
             'GET resumen reportes' => ['GET', '/api/reportes/resumen', $ambos],
             'GET alertas por categoria' => ['GET', '/api/reportes/alertas-categoria', $ambos],
-            'GET exportar reporte' => ['GET', '/api/reportes/exportar', $ambos],
+            'GET sesiones de reportes' => ['GET', '/api/reportes/sesiones', $ambos],
+            'GET alertas auditadas de una sesion' => ['GET', '/api/reportes/sesiones/1/alertas', $ambos],
         ];
     }
 

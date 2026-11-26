@@ -92,4 +92,9 @@ Route::middleware([...$autenticado, ...$rol('ADMIN,ENFERMERA')])->group(function
     Route::get('/reportes/resumen', [ReporteController::class, 'resumen'])->name('reportes.resumen');
     Route::get('/reportes/alertas-categoria', [ReporteController::class, 'alertasCategoria'])
         ->name('reportes.alertas-categoria');
+
+    Route::get('/reportes/sesiones', [ReporteController::class, 'sesiones'])
+        ->name('reportes.sesiones');
+    Route::get('/reportes/sesiones/{id}/alertas', [ReporteController::class, 'alertasSesion'])
+        ->where('id', '-?[0-9]{1,18}')->name('reportes.sesiones.alertas');
 });

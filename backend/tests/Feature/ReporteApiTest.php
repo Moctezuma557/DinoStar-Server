@@ -303,6 +303,272 @@ class ReporteApiTest extends TestCase
         }
     }
 
+    // ---------------------------------------------------------------------
+    // K2: GET /api/reportes/sesiones y GET /api/reportes/sesiones/{id}/alertas
+    // ---------------------------------------------------------------------
+
+    public function test_sesiones_con_per_page_10_devuelve_10_filas_y_metadata_de_paginacion(): void
+    {
+        $this->escenario();
+        $this->sesionesFinalizadas(12);
+
+        $respuesta = $this->reporte('sesiones', ['per_page' => 10])->assertOk();
+
+        $respuesta->assertJsonCount(10, 'data')
+            ->assertJsonStructure([
+                'data' => [['id', 'paciente', 'enfermera', 'ubicacion' => ['sala', 'numero_cama'], 'inicio', 'fin',
+                    'duracion_segundos', 'tipo_solucion', 'vol_total', 'numero_alertas', 'estado']],
+                'links' => ['first', 'last', 'prev', 'next'],
+                'meta' => ['current_page', 'from', 'last_page', 'per_page', 'to', 'total'],
+            ]);
+        $this->assertSame(
+            ['current_page' => 1, 'from' => 1, 'last_page' => 2, 'per_page' => 10, 'to' => 10, 'total' => 15],
+            collect($respuesta->json('meta'))->only(['current_page', 'from', 'last_page', 'per_page', 'to', 'total'])->all(),
+        );
+
+        $segunda = $this->reporte('sesiones', ['per_page' => 10, 'page' => 2])->assertOk();
+        $segunda->assertJsonCount(5, 'data')->assertJsonPath('meta.current_page', 2)->assertJsonPath('meta.from', 11);
+        $this->assertCount(
+            15,
+            array_unique([...array_column($respuesta->json('data'), 'id'), ...array_column($segunda->json('data'), 'id')]),
+            'Las páginas no deben repetir sesiones.',
+        );
+    }
+
+    public function test_sesiones_sin_per_page_usa_10_filas_por_defecto(): void
+    {
+        $this->escenario();
+        $this->sesionesFinalizadas(12);
+
+        $this->reporte('sesiones')->assertOk()->assertJsonCount(10, 'data')
+            ->assertJsonPath('meta.per_page', 10)->assertJsonPath('meta.total', 15);
+    }
+
+    public function test_sesiones_se_ordenan_por_inicio_descendente_y_incluyen_todos_los_estados(): void
+    {
+        $this->escenario();
+
+        $filas = $this->reporte('sesiones')->assertOk()->json('data');
+
+        $this->assertSame([-13502, -13501, -13503], array_column($filas, 'id'));
+        $this->assertSame(['ACTIVA', 'FINALIZADA', 'FINALIZADA'], array_column($filas, 'estado'));
+    }
+
+    public function test_cada_fila_de_sesiones_trae_las_columnas_de_la_tabla_de_b1(): void
+    {
+        $this->escenario();
+
+        $respuesta = $this->reporte('sesiones', ['fecha_inicio' => '2026-11-20', 'fecha_fin' => '2026-11-20'])->assertOk();
+
+        $this->assertSame([
+            'id' => -13502, 'paciente' => 'Paciente PDF B', 'enfermera' => 'Enfermera PDF Dos',
+            'ubicacion' => ['sala' => 'Sala PDF A', 'numero_cama' => 'PDF--13502'],
+            'inicio' => '2026-11-20T23:59:59.000000Z', 'fin' => null, 'duracion_segundos' => null,
+            'tipo_solucion' => 'SALINA_0_9', 'vol_total' => 1000.0, 'numero_alertas' => 1, 'estado' => 'ACTIVA',
+        ], $respuesta->json('data.0'));
+        $this->assertSame([
+            'id' => -13501, 'paciente' => 'Paciente PDF Álvarez', 'enfermera' => 'Enfermera PDF Uno',
+            'ubicacion' => ['sala' => 'Sala PDF A', 'numero_cama' => 'PDF--13501'],
+            'inicio' => '2026-11-20T00:00:00.000000Z', 'fin' => '2026-11-20T00:20:00.000000Z', 'duracion_segundos' => 1200.0,
+            'tipo_solucion' => 'Solución salina 0.9%', 'vol_total' => 500.0, 'numero_alertas' => 2, 'estado' => 'FINALIZADA',
+        ], $respuesta->json('data.1'));
+        $this->assertSame(
+            ['id', 'paciente', 'enfermera', 'ubicacion', 'inicio', 'fin', 'duracion_segundos', 'tipo_solucion', 'vol_total', 'numero_alertas', 'estado'],
+            array_keys($respuesta->json('data.0')),
+        );
+        $this->assertStringContainsString('"duracion_segundos":1200.0', $respuesta->getContent());
+        $this->assertStringContainsString('"duracion_segundos":null', $respuesta->getContent());
+    }
+
+    #[DataProvider('filtros')]
+    public function test_los_filtros_reducen_las_sesiones_listadas(array $filtros, array $esperadas): void
+    {
+        $this->escenario();
+
+        $respuesta = $this->reporte('sesiones', $filtros)->assertOk();
+
+        $this->assertSame($esperadas, array_column($respuesta->json('data'), 'id'));
+        $this->assertSame(count($esperadas), $respuesta->json('meta.total'));
+    }
+
+    public function test_los_filtros_se_combinan_con_la_paginacion_y_se_conservan_en_los_enlaces(): void
+    {
+        $this->escenario();
+
+        $respuesta = $this->reporte('sesiones', [
+            'fecha_inicio' => '2026-11-20', 'fecha_fin' => '2026-11-20', 'per_page' => 1,
+        ])->assertOk();
+
+        $respuesta->assertJsonCount(1, 'data')->assertJsonPath('data.0.id', -13502)
+            ->assertJsonPath('meta.total', 2)->assertJsonPath('meta.last_page', 2);
+        $this->assertStringContainsString('fecha_inicio=2026-11-20', $respuesta->json('links.next'));
+        $this->assertStringContainsString('per_page=1', $respuesta->json('links.next'));
+    }
+
+    public function test_sesiones_sin_coincidencias_devuelve_una_pagina_vacia_sin_error(): void
+    {
+        $this->escenario();
+
+        $this->reporte('sesiones', ['fecha_inicio' => '2020-01-01', 'fecha_fin' => '2020-01-31'])
+            ->assertOk()->assertJsonCount(0, 'data')->assertJsonPath('meta.total', 0);
+        $this->reporte('sesiones', ['page' => 99])->assertOk()->assertJsonCount(0, 'data')
+            ->assertJsonPath('meta.total', 3);
+    }
+
+    #[DataProvider('filtrosInvalidos')]
+    public function test_los_filtros_invalidos_de_sesiones_devuelven_422(array $filtros, string $campo): void
+    {
+        $this->reporte('sesiones', $filtros)->assertUnprocessable()->assertJsonValidationErrors($campo);
+    }
+
+    public static function paginacionInvalida(): array
+    {
+        return [
+            'per_page cero' => [['per_page' => 0], 'per_page'],
+            'per_page sobre el maximo' => [['per_page' => 101], 'per_page'],
+            'per_page no entero' => [['per_page' => 'diez'], 'per_page'],
+            'page cero' => [['page' => 0], 'page'],
+            'page negativa' => [['page' => -1], 'page'],
+            'page fuera de rango' => [['page' => '99999999999999999999'], 'page'],
+        ];
+    }
+
+    #[DataProvider('paginacionInvalida')]
+    public function test_la_paginacion_invalida_devuelve_422(array $parametros, string $campo): void
+    {
+        $this->reporte('sesiones', $parametros)->assertUnprocessable()->assertJsonValidationErrors($campo);
+    }
+
+    public function test_auditoria_de_una_sesion_lista_cada_alerta_con_su_atencion(): void
+    {
+        $this->escenario();
+
+        $respuesta = $this->getJson('/api/reportes/sesiones/-13501/alertas')->assertOk();
+        $filas = $respuesta->json('data');
+
+        $this->assertCount(3, $filas);
+        $this->assertSame(['GOTEO_LENTO', 'GOTEO_LENTO', 'FIN_BOLSA'], array_column($filas, 'tipo'));
+        $this->assertSame(['2026-11-20T00:00:10.000000Z', '2026-11-20T00:00:10.000000Z', '2026-11-21T00:00:00.000000Z'], array_column($filas, 'hora'));
+        $this->assertSame(['Enfermera PDF Uno', 'Enfermera PDF Uno', null], array_column($filas, 'atendida_por'));
+        $this->assertSame([false, true, null], array_column($filas, 'resolvio'));
+        $this->assertSame(
+            DB::table('alertas')->where('sesion_id', -13501)->orderBy('created_at')->pluck('mensaje')->all(),
+            [$filas[0]['descripcion'], $filas[2]['descripcion']],
+        );
+        $this->assertSame($filas[0]['descripcion'], $filas[1]['descripcion']);
+    }
+
+    public function test_la_auditoria_expone_solo_las_columnas_de_b1(): void
+    {
+        $this->escenario();
+
+        $filas = $this->getJson('/api/reportes/sesiones/-13501/alertas')->assertOk()->json('data');
+
+        $this->assertSame(['id', 'tipo', 'hora', 'descripcion', 'atendida_por', 'resolvio', 'tiempo_respuesta'], array_keys($filas[1]));
+    }
+
+    public function test_el_tiempo_de_respuesta_solo_cuenta_la_atencion_que_resolvio(): void
+    {
+        $this->escenario();
+
+        $filas = $this->getJson('/api/reportes/sesiones/-13501/alertas')->assertOk()->json('data');
+
+        // Atención 00:00:40 (resolvio=false) -> null; atención 00:01:40 (resolvio=true) -> 100 s - 10 s = 90 s; sin atención -> null.
+        $this->assertSame([null, 90.0, null], array_column($filas, 'tiempo_respuesta'));
+        $this->assertNull($filas[2]['atendida_por']);
+        $this->assertNull($filas[2]['resolvio']);
+
+        $otra = $this->getJson('/api/reportes/sesiones/-13503/alertas')->assertOk();
+        $this->assertSame(['FIN_BOLSA', 'DESCONECTADO'], array_column($otra->json('data'), 'tipo'));
+        $this->assertSame([86400.0, null], array_column($otra->json('data'), 'tiempo_respuesta'));
+        $this->assertStringContainsString('"tiempo_respuesta":86400.0', $otra->getContent());
+        $this->assertStringContainsString('"tiempo_respuesta":null', $otra->getContent());
+    }
+
+    public function test_el_tiempo_de_respuesta_de_la_auditoria_coincide_con_el_calculo_sql_de_b1(): void
+    {
+        $this->escenario();
+
+        $directo = DB::select(<<<'SQL'
+            SELECT a.id, EXTRACT(EPOCH FROM (t.created_at - a.created_at))::double precision AS segundos
+            FROM alertas a JOIN atenciones_alerta t ON t.alerta_id = a.id
+            WHERE t.resolvio = TRUE AND a.sesion_id IN (-13501, -13503) ORDER BY a.id
+            SQL);
+
+        $api = [];
+        foreach ([-13501, -13503] as $sesion) {
+            foreach ($this->getJson("/api/reportes/sesiones/{$sesion}/alertas")->assertOk()->json('data') as $fila) {
+                if ($fila['tiempo_respuesta'] !== null) {
+                    $api[$fila['id']] = $fila['tiempo_respuesta'];
+                }
+            }
+        }
+        ksort($api);
+
+        $this->assertSame(array_column($directo, 'segundos', 'id'), $api);
+    }
+
+    public function test_una_sesion_sin_alertas_devuelve_data_vacia(): void
+    {
+        $this->escenario();
+        $limpia = Sesion::factory()->create(['id' => -13504, 'paciente_id' => -13503, 'enfermera_id' => -13501, 'estado' => 'FINALIZADA', 'fin' => now()]);
+
+        $this->getJson("/api/reportes/sesiones/{$limpia->id}/alertas")->assertOk()->assertExactJson(['data' => []]);
+        $this->assertSame(0, $this->reporte('sesiones', ['paciente_id' => -13503, 'per_page' => 100])
+            ->json('data.0.numero_alertas'));
+    }
+
+    public function test_numero_alertas_de_la_tabla_coincide_con_las_alertas_auditadas(): void
+    {
+        $this->escenario();
+
+        foreach ($this->reporte('sesiones', ['per_page' => 100])->assertOk()->json('data') as $sesion) {
+            $auditadas = collect($this->getJson("/api/reportes/sesiones/{$sesion['id']}/alertas")->assertOk()->json('data'))
+                ->pluck('id')->unique()->count();
+            $this->assertSame($sesion['numero_alertas'], $auditadas, 'sesión '.$sesion['id']);
+        }
+    }
+
+    public function test_la_auditoria_de_una_sesion_inexistente_o_con_id_invalido_responde_404(): void
+    {
+        $this->escenario();
+
+        $this->getJson('/api/reportes/sesiones/999999/alertas')->assertNotFound()
+            ->assertJsonPath('message', 'Sesión no encontrada.');
+        $this->getJson('/api/reportes/sesiones/abc/alertas')->assertNotFound();
+    }
+
+    public function test_los_reportes_de_sesiones_son_de_solo_lectura(): void
+    {
+        $this->escenario();
+        $tablas = ['usuarios', 'pacientes', 'sesiones', 'alertas', 'atenciones_alerta', 'logs_auditoria'];
+        $antes = [];
+        foreach ($tablas as $tabla) {
+            $antes[$tabla] = DB::table($tabla)->orderBy('id')->get()->toJson();
+        }
+
+        $this->reporte('sesiones')->assertOk();
+        $this->getJson('/api/reportes/sesiones/-13501/alertas')->assertOk();
+        $this->postJson('/api/reportes/sesiones')->assertStatus(405);
+        $this->deleteJson('/api/reportes/sesiones/-13501/alertas')->assertStatus(405);
+
+        foreach ($tablas as $tabla) {
+            $this->assertSame($antes[$tabla], DB::table($tabla)->orderBy('id')->get()->toJson(), $tabla);
+        }
+    }
+
+    /** Crea sesiones FINALIZADAS (cada una con su paciente) que inician antes que las del escenario. */
+    private function sesionesFinalizadas(int $cantidad): void
+    {
+        $enfermera = User::factory()->create();
+        for ($i = 1; $i <= $cantidad; $i++) {
+            Sesion::factory()->create([
+                'enfermera_id' => $enfermera->id, 'estado' => 'FINALIZADA',
+                'inicio' => now()->subDays(10)->subMinutes($i), 'fin' => now()->subDays(10),
+            ]);
+        }
+    }
+
     private function reporte(string $ruta, array $filtros = []): TestResponse
     {
         return $this->getJson('/api/reportes/'.$ruta.'?'.http_build_query($filtros));
