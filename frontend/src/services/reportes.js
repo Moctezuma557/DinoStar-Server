@@ -1,27 +1,11 @@
-// frontend/src/services/reportes.js
-//
-// Contrato (Documentación corte 5, sección 5):
-//   GET /api/reportes/resumen
-//       ?fecha_inicio=&fecha_fin=&paciente_id=&sala=&enfermera_id=
-//   GET /api/reportes/alertas-categoria   ?<mismos filtros>
-//
-// Mientras K1 no esté mergeado (lun 24 nov) se usa USAR_DATOS_LOCALES = true.
-// El día que K1 esté listo: cambiar a false. No hay que tocar reportes.jsx.
 
 import { pedirJson } from "./api";
 
-const USAR_DATOS_LOCALES = true;
+export const SESIONES_POR_PAGINA = 10;
 
-// Si el backend devuelve el tiempo promedio en otra unidad, cambiar SOLO esto:
-// B1 devuelve segundos (EXTRACT(EPOCH ...)), así que el valor correcto es 1.
-// 1 = ya viene en segundos, 60 = viene en minutos, 0.001 = viene en milisegundos.
+// B1 devuelve los tiempos en segundos (EXTRACT(EPOCH ...)), por eso es 1.
 const UNIDAD_TIEMPO_A_SEGUNDOS = 1;
-
-/* ------------------------------------------------------------------ */
-/* Utilidades                                                          */
-/* ------------------------------------------------------------------ */
-
-// Devuelve el primer campo que exista (el contrato no fija todos los nombres).
+// Devuelve el primer campo que exista.
 function tomar(obj, claves) {
   for (const clave of claves) {
     if (obj?.[clave] !== undefined) return obj[clave];
@@ -44,14 +28,14 @@ function aSegundos(valor) {
 // Filtros de la UI -> parámetros del contrato. Vacío => no se envía.
 function construirParams(filtros) {
   const limpio = (v) => (v === "" || v === undefined ? undefined : v);
+  const busqueda = filtros.busqueda?.trim() ?? "";
+
   return {
     fecha_inicio: limpio(filtros.desde),
     fecha_fin: limpio(filtros.hasta),
     // B1 valida paciente_id como entero (id de la tabla pacientes): un texto
     // como "Elena" daría error 422, así que solo se envía si es numérico.
-    paciente_id: /^\d+$/.test(filtros.busqueda?.trim() ?? "")
-      ? filtros.busqueda.trim()
-      : undefined,
+    paciente_id: /^\d+$/.test(busqueda) ? busqueda : undefined,
     sala: limpio(filtros.sala),
     enfermera_id: limpio(filtros.enfermera),
   };
@@ -65,7 +49,6 @@ export function adaptarResumen(crudo) {
   const total = aNumero(tomar(crudo, ["total_sesiones", "total"]));
 
   // B1 devuelve sesiones_completadas como { cantidad, porcentaje }.
-  // También se acepta un número suelto + un campo de porcentaje aparte.
   const bloque = tomar(crudo, ["sesiones_completadas", "completadas"]);
   const esObjeto = bloque !== null && typeof bloque === "object";
   const completadas = aNumero(esObjeto ? bloque.cantidad : bloque);
@@ -85,11 +68,7 @@ export function adaptarResumen(crudo) {
       tomar(crudo, ["sesiones_con_alertas", "con_alertas"])
     ),
     tiempo_promedio_respuesta_seg: aSegundos(
-      tomar(crudo, [
-        "tiempo_promedio_respuesta",
-        "tiempo_promedio_respuesta_seg",
-        "tiempo_prom_respuesta",
-      ])
+      tomar(crudo, ["tiempo_promedio_respuesta", "tiempo_promedio_respuesta_seg"])
     ),
   };
 }
@@ -97,22 +76,17 @@ export function adaptarResumen(crudo) {
 function adaptarCategoria(crudo, tipoPorDefecto) {
   return {
     tipo: crudo.tipo ?? tipoPorDefecto,
-    cantidad: aNumero(tomar(crudo, ["cantidad", "total", "count"])),
-    porcentaje: aNumero(tomar(crudo, ["porcentaje", "pct", "%"])),
+    cantidad: aNumero(crudo.cantidad),
+    porcentaje: aNumero(crudo.porcentaje),
     promedio_resolucion_seg: aSegundos(
-      tomar(crudo, [
-        "tiempo_promedio_resolucion",
-        "promedio_resolucion_seg",
-        "promedio_resolucion",
-        "prom_resolucion",
-      ])
+      tomar(crudo, ["tiempo_promedio_resolucion", "promedio_resolucion_seg"])
     ),
   };
 }
 
-// Acepta una lista [{tipo, ...}] o un objeto { GOTEO_LENTO: {...}, ... }
+// K1 responde { data: [ {tipo, cantidad, porcentaje, tiempo_promedio_resolucion} ] }
 export function adaptarCategorias(crudo) {
-  const contenido = crudo?.categorias ?? crudo?.data ?? crudo ?? [];
+  const contenido = crudo?.data ?? crudo ?? [];
 
   if (Array.isArray(contenido)) {
     return contenido.map((c) => adaptarCategoria(c));
@@ -122,65 +96,63 @@ export function adaptarCategorias(crudo) {
   );
 }
 
-/* ------------------------------------------------------------------ */
-/* Datos de ejemplo (con la forma del contrato). Se borran con K1.     */
-/* Escribe "zzz" en el buscador para ver el estado vacío.              */
-/* ------------------------------------------------------------------ */
+// SesionReporteResource -> forma que usa la tabla.
+export function adaptarSesion(crudo) {
+  const ubicacion = crudo.ubicacion ?? {};
+  return {
+    id: crudo.id,
+    paciente: crudo.paciente ?? "Sin nombre",
+    enfermera: crudo.enfermera ?? null,
+    sala: ubicacion.sala ?? null,
+    cama: ubicacion.numero_cama ?? null,
+    inicio: crudo.inicio ?? null,
+    fin: crudo.fin ?? null, // null = sesión en curso
+    duracion_segundos: aSegundos(crudo.duracion_segundos),
+    solucion: crudo.tipo_solucion ?? null,
+    volumen: aNumero(crudo.vol_total),
+    numero_alertas: aNumero(crudo.numero_alertas) ?? 0,
+    estado: crudo.estado ?? null,
+  };
+}
 
-function respuestasLocales(filtros) {
-  const vacio = filtros.busqueda?.trim().toLowerCase() === "zzz";
+// AuditoriaAlertaResource -> forma que usa el panel de auditoría.
+export function adaptarAlertaAuditoria(crudo) {
+  return {
+    id: crudo.id,
+    tipo: crudo.tipo,
+    hora: crudo.hora ?? null,
+    descripcion: crudo.descripcion ?? null,
+    atendida_por: crudo.atendida_por ?? null, // null = alerta sin atender
+    resolvio: crudo.resolvio ?? null,
+    tiempo_respuesta_seg: aSegundos(crudo.tiempo_respuesta), // null => "—"
+  };
+}
 
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      if (vacio) {
-        resolve({
-          resumen: {
-            total_sesiones: 0,
-            sesiones_completadas: 0,
-            porcentaje_completadas: null,
-            sesiones_con_alertas: 0,
-            tiempo_promedio_respuesta_seg: null,
-          },
-          categorias: [],
-        });
-        return;
-      }
-      resolve({
-        resumen: {
-          total_sesiones: 1420,
-          sesiones_completadas: 1308,
-          porcentaje_completadas: 92.1,
-          sesiones_con_alertas: 86,
-          tiempo_promedio_respuesta_seg: 144,
-        },
-        categorias: [
-          { tipo: "GOTEO_LENTO", cantidad: 48, porcentaje: 55.8, promedio_resolucion_seg: 105 },
-          { tipo: "FIN_BOLSA", cantidad: 24, porcentaje: 27.9, promedio_resolucion_seg: 130 },
-          { tipo: "GOTEO_RAPIDO", cantidad: 14, porcentaje: 16.3, promedio_resolucion_seg: null },
-        ],
-      });
-    }, 600);
-  });
+// Respuesta paginada de Laravel: { data: [...], meta: {...}, links: {...} }
+function adaptarPagina(respuesta, paginaPedida) {
+  const lista = Array.isArray(respuesta) ? respuesta : (respuesta?.data ?? []);
+  const meta = respuesta?.meta ?? {};
+
+  return {
+    filas: lista.map(adaptarSesion),
+    pagina: aNumero(meta.current_page) ?? paginaPedida,
+    totalPaginas: aNumero(meta.last_page) ?? 1,
+    total: aNumero(meta.total) ?? lista.length,
+    desde: aNumero(meta.from),
+    hasta: aNumero(meta.to),
+  };
 }
 
 /* ------------------------------------------------------------------ */
-/* Función que usa la página                                           */
+/* Funciones que usa la página                                         */
 /* ------------------------------------------------------------------ */
 
 /**
+ * KPIs + desglose por categoría (K1).
  * @param {object} filtros  { desde, hasta, busqueda, sala, enfermera }
  * @param {AbortSignal} signal
- * @returns {Promise<{resumen: object, categorias: object[]}>}
  */
 export async function obtenerReporte(filtros, signal) {
-  if (USAR_DATOS_LOCALES) {
-    const local = await respuestasLocales(filtros);
-    return {
-      resumen: adaptarResumen(local.resumen),
-      categorias: adaptarCategorias(local.categorias),
-    };
-  }
-
   const params = construirParams(filtros);
 
   const [resumen, categorias] = await Promise.all([
@@ -192,4 +164,37 @@ export async function obtenerReporte(filtros, signal) {
     resumen: adaptarResumen(resumen?.data ?? resumen),
     categorias: adaptarCategorias(categorias),
   };
+}
+
+/**
+ * Sesiones históricas paginadas (K2).
+ * @param {object} filtros
+ * @param {{pagina?: number, porPagina?: number}} paginacion
+ * @param {AbortSignal} signal
+ */
+export async function obtenerSesiones(
+  filtros,
+  { pagina = 1, porPagina = SESIONES_POR_PAGINA } = {},
+  signal
+) {
+  const respuesta = await pedirJson("/api/reportes/sesiones", {
+    params: { ...construirParams(filtros), page: pagina, per_page: porPagina },
+    signal,
+  });
+
+  return adaptarPagina(respuesta, pagina);
+}
+
+/**
+ * Auditoría de alertas de una sesión (K2).
+ * @param {number|string} id  id de la sesión
+ * @param {AbortSignal} signal
+ */
+export async function obtenerAuditoriaSesion(id, signal) {
+  const respuesta = await pedirJson(`/api/reportes/sesiones/${id}/alertas`, {
+    signal,
+  });
+
+  const lista = Array.isArray(respuesta) ? respuesta : (respuesta?.data ?? []);
+  return lista.map(adaptarAlertaAuditoria);
 }
