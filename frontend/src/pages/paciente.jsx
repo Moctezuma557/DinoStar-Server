@@ -1,5 +1,6 @@
 import { Link, useParams } from "react-router-dom";
 import Icono from "../components/Icono";
+import GraficaGoteo from "../components/GraficaGoteo";
 import { usePacienteDetalle } from "../hooks/usePacienteDetalle";
 import { useLecturas } from "../hooks/useLecturas";
 import "./paciente.css";
@@ -389,7 +390,10 @@ export default function Paciente() {
             </div>
           </div>
         </div>
-
+        <GraficaGoteo
+          lecturas={lecturas}
+          desactualizado={Boolean(errorLecturas)}
+        />
         <HistorialLecturas
           lecturas={lecturas}
           modoGoteo={sesion.modoGoteo}
