@@ -524,3 +524,45 @@ body {
     max-width: 100%;
   }
 }
+
+.seccion-grafica {
+  margin: 24px 0 0;
+  padding-top: 20px;
+  border-top: 1px solid #edf1f7;
+}
+
+.grafica-goteo-resumen {
+  margin: 0 0 12px;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: #475569;
+}
+
+.grafica-goteo-lienzo {
+  width: 100%;
+  min-width: 0;
+  height: 260px;
+}
+
+.grafica-goteo-estado {
+  margin: 0;
+  padding: 18px;
+  border: 1px dashed #dbe3ee;
+  border-radius: 10px;
+  text-align: center;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: #94a3b8;
+}
+
+.grafica-goteo-nota {
+  margin: 8px 0 0;
+  font-size: 0.75rem;
+  color: #92400e;
+}
+
+@media (max-width: 560px) {
+  .grafica-goteo-lienzo {
+    height: 200px;
+  }
+}
