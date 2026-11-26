@@ -4,15 +4,13 @@ import {
   obtenerReporte,
   obtenerSesiones,
   obtenerAuditoriaSesion,
+  exportarReportePdf,
   SESIONES_POR_PAGINA,
 } from "../services/reportes";
 import { obtenerEnfermeras } from "../services/enfermeras";
 import { obtenerPacientes } from "../services/pacientes";
 import "./reportes.css";
 
-/* ------------------------------------------------------------------ */
-/* Formato: null => "—" (nunca 0)                                      */
-/* ------------------------------------------------------------------ */
 
 function formatearNumero(valor) {
   if (valor === null || valor === undefined) return "—";
@@ -59,11 +57,6 @@ const CLASE_CATEGORIA = {
   GOTEO_RAPIDO: "rapido",
 };
 
-
-/* ------------------------------------------------------------------ */
-/* V2: formato de fechas y helpers de la tabla de sesiones             */
-/* ------------------------------------------------------------------ */
-
 function formatearFecha(iso) {
   if (!iso) return "—";
   return new Date(iso).toLocaleDateString("es-MX", {
@@ -100,7 +93,6 @@ function iniciales(nombre) {
     .toUpperCase();
 }
 
-// Estados conocidos de sesiones; cualquier otro se muestra tal cual.
 const ESTADOS_SESION = {
   FINALIZADA: { texto: "Completada", clase: "normal" },
   ACTIVA: { texto: "Activa", clase: "primario" },
@@ -121,7 +113,6 @@ function claseAlertas(cantidad) {
   return cantidad === 1 ? "atencion" : "alerta";
 }
 
-// [1, 2, 3, "gap-8", 9]: siempre primera, última y la actual con sus vecinas.
 function paginasVisibles(actual, total) {
   const numeros = [...new Set([1, total, actual - 1, actual, actual + 1])]
     .filter((n) => n >= 1 && n <= total)
@@ -134,11 +125,6 @@ function paginasVisibles(actual, total) {
   });
   return resultado;
 }
-
-/* ------------------------------------------------------------------ */
-/* Auditoría de alertas de una sesión (fila expandida)                 */
-/* ------------------------------------------------------------------ */
-
 function AuditoriaSesion({ sesionId }) {
   const [respuesta, setRespuesta] = useState({
     clave: null,
@@ -240,10 +226,6 @@ function AuditoriaSesion({ sesionId }) {
     </div>
   );
 }
-
-/* ------------------------------------------------------------------ */
-/* Tabla de sesiones auditadas + paginación del backend                */
-/* ------------------------------------------------------------------ */
 
 function TablaSesiones({ filtros }) {
   const filtrosClave = JSON.stringify(filtros);
@@ -480,9 +462,42 @@ function TablaSesiones({ filtros }) {
   );
 }
 
-/* ------------------------------------------------------------------ */
-/* Componente                                                          */
-/* ------------------------------------------------------------------ */
+function nombreArchivoPdf() {
+  const d = new Date();
+  const dos = (n) => String(n).padStart(2, "0");
+  const fecha = `${d.getFullYear()}${dos(d.getMonth() + 1)}${dos(d.getDate())}`;
+  const hora = `${dos(d.getHours())}${dos(d.getMinutes())}${dos(d.getSeconds())}`;
+  return `dinostar-reporte-${fecha}-${hora}.pdf`;
+}
+
+
+function descargarBlob(blob, nombre) {
+  const url = URL.createObjectURL(blob);
+  const enlace = document.createElement("a");
+  enlace.href = url;
+  enlace.download = nombre;
+  document.body.appendChild(enlace);
+  enlace.click();
+  enlace.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function mensajeErrorExportar(error) {
+  const estado = error?.estado;
+  if (estado === 422) {
+    return `No se pudo generar el PDF: revisa los filtros. ${error.message}`;
+  }
+  if (estado === 401 || estado === 403) {
+    return "No tienes permiso para exportar el reporte.";
+  }
+  if (estado >= 500) {
+    return "El servidor no pudo generar el PDF. Intenta de nuevo.";
+  }
+  if (error instanceof TypeError) {
+    return "No se pudo conectar con el servidor. Revisa tu conexión e intenta de nuevo.";
+  }
+  return "No se pudo generar el PDF. Intenta de nuevo.";
+}
 
 export default function Reportes() {
   const [filtros, setFiltros] = useState(FILTROS_INICIALES);
@@ -495,16 +510,14 @@ export default function Reportes() {
   const [reintento, setReintento] = useState(0);
   const [enfermeras, setEnfermeras] = useState([]);
   const [salas, setSalas] = useState([]);
-
-  // Identifica "qué consulta es la actual". Si la última respuesta guardada
-  // no corresponde a esta clave, significa que todavía está cargando.
+  const [exportando, setExportando] = useState(false);
+  const [errorExportar, setErrorExportar] = useState(null);
   const clave = `${JSON.stringify(filtros)}|${reintento}`;
   const cargando = respuesta.clave !== clave;
   const datos = respuesta.datos;
   const error = respuesta.error;
 
-  // Opciones de los dropdowns, tomadas de los servicios existentes:
-  // enfermeras -> /api/enfermeras (IDs reales); salas -> las de los pacientes.
+ 
   useEffect(() => {
     const control = new AbortController();
 
@@ -522,7 +535,7 @@ export default function Reportes() {
     return () => control.abort();
   }, []);
 
-  // Debounce del buscador: solo consulta 400 ms después de dejar de escribir
+ 
   useEffect(() => {
     const t = setTimeout(() => {
       setFiltros((prev) => ({ ...prev, busqueda: textoBusqueda }));
@@ -530,7 +543,7 @@ export default function Reportes() {
     return () => clearTimeout(t);
   }, [textoBusqueda]);
 
-  // Cada cambio de filtros vuelve a consultar
+  
   useEffect(() => {
     const control = new AbortController();
 
@@ -557,6 +570,24 @@ export default function Reportes() {
     setFiltros((prev) => ({ ...prev, [campo]: valor }));
   }
 
+  async function exportarPdf() {
+    setExportando(true);
+    setErrorExportar(null);
+
+    try {
+      
+      const blob = await exportarReportePdf({
+        ...filtros,
+        busqueda: textoBusqueda,
+      });
+      descargarBlob(blob, nombreArchivoPdf());
+    } catch (error) {
+      setErrorExportar(mensajeErrorExportar(error));
+    } finally {
+      setExportando(false);
+    }
+  }
+
   function limpiarFiltros() {
     setTextoBusqueda("");
     setFiltros(FILTROS_INICIALES);
@@ -574,13 +605,40 @@ export default function Reportes() {
             registro de alertas clínicas.
           </p>
         </div>
-        <button type="button" className="btn btn--contorno" onClick={limpiarFiltros}>
-          <Icono nombre="cerrar" tamano={16} />
-          Limpiar filtros
-        </button>
+        <div className="reportes__acciones">
+          <div className="reportes__botones">
+            <button type="button" className="btn btn--contorno" onClick={limpiarFiltros}>
+              <Icono nombre="cerrar" tamano={16} />
+              Limpiar filtros
+            </button>
+            <button
+              type="button"
+              className="btn btn--primario"
+              onClick={exportarPdf}
+              disabled={exportando}
+              aria-busy={exportando}
+            >
+              {exportando ? (
+                <>
+                  <span className="spinner" aria-hidden="true" />
+                  Generando PDF…
+                </>
+              ) : (
+                <>
+                  <Icono nombre="reporte" tamano={16} />
+                  Exportar Reporte (PDF)
+                </>
+              )}
+            </button>
+          </div>
+          {errorExportar && (
+            <p className="reportes__error-exportar" role="alert">
+              {errorExportar}
+            </p>
+          )}
+        </div>
       </header>
 
-      {/* ---------- Filtros ---------- */}
       <div className="reportes__panel reportes__filtros">
         <div className="campo">
           <label className="campo-etiqueta" htmlFor="rep-desde">
@@ -670,7 +728,7 @@ export default function Reportes() {
         </div>
       </div>
 
-      {/* ---------- Estados ---------- */}
+
       {cargando && (
         <div className="reportes__estado" role="status">
           Cargando reporte…
@@ -758,7 +816,7 @@ export default function Reportes() {
             </article>
           </div>
 
-          {/* ---------- Desglose por categoría ---------- */}
+
           <div className="reportes__panel desglose">
             <h2 className="desglose__titulo">
               <Icono nombre="senal" tamano={20} />

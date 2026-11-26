@@ -1,11 +1,7 @@
-
-import { pedirJson } from "./api";
-
+import { pedirJson, pedirBlob } from "./api";
 export const SESIONES_POR_PAGINA = 10;
-
-// B1 devuelve los tiempos en segundos (EXTRACT(EPOCH ...)), por eso es 1.
 const UNIDAD_TIEMPO_A_SEGUNDOS = 1;
-// Devuelve el primer campo que exista.
+
 function tomar(obj, claves) {
   for (const clave of claves) {
     if (obj?.[clave] !== undefined) return obj[clave];
@@ -13,7 +9,6 @@ function tomar(obj, claves) {
   return null;
 }
 
-// null se queda en null (la UI lo muestra como "—"); nunca se convierte en 0.
 function aNumero(valor) {
   if (valor === null || valor === undefined || valor === "") return null;
   const n = Number(valor);
@@ -25,7 +20,6 @@ function aSegundos(valor) {
   return n === null ? null : n * UNIDAD_TIEMPO_A_SEGUNDOS;
 }
 
-// Filtros de la UI -> parámetros del contrato. Vacío => no se envía.
 function construirParams(filtros) {
   const limpio = (v) => (v === "" || v === undefined ? undefined : v);
   const busqueda = filtros.busqueda?.trim() ?? "";
@@ -33,22 +27,17 @@ function construirParams(filtros) {
   return {
     fecha_inicio: limpio(filtros.desde),
     fecha_fin: limpio(filtros.hasta),
-    // B1 valida paciente_id como entero (id de la tabla pacientes): un texto
-    // como "Elena" daría error 422, así que solo se envía si es numérico.
     paciente_id: /^\d+$/.test(busqueda) ? busqueda : undefined,
     sala: limpio(filtros.sala),
     enfermera_id: limpio(filtros.enfermera),
   };
 }
 
-/* ------------------------------------------------------------------ */
-/* Adaptadores: respuesta del backend -> forma que usa la UI           */
-/* ------------------------------------------------------------------ */
 
 export function adaptarResumen(crudo) {
   const total = aNumero(tomar(crudo, ["total_sesiones", "total"]));
 
-  // B1 devuelve sesiones_completadas como { cantidad, porcentaje }.
+  
   const bloque = tomar(crudo, ["sesiones_completadas", "completadas"]);
   const esObjeto = bloque !== null && typeof bloque === "object";
   const completadas = aNumero(esObjeto ? bloque.cantidad : bloque);
@@ -84,7 +73,6 @@ function adaptarCategoria(crudo, tipoPorDefecto) {
   };
 }
 
-// K1 responde { data: [ {tipo, cantidad, porcentaje, tiempo_promedio_resolucion} ] }
 export function adaptarCategorias(crudo) {
   const contenido = crudo?.data ?? crudo ?? [];
 
@@ -96,7 +84,6 @@ export function adaptarCategorias(crudo) {
   );
 }
 
-// SesionReporteResource -> forma que usa la tabla.
 export function adaptarSesion(crudo) {
   const ubicacion = crudo.ubicacion ?? {};
   return {
@@ -115,20 +102,18 @@ export function adaptarSesion(crudo) {
   };
 }
 
-// AuditoriaAlertaResource -> forma que usa el panel de auditoría.
 export function adaptarAlertaAuditoria(crudo) {
   return {
     id: crudo.id,
     tipo: crudo.tipo,
     hora: crudo.hora ?? null,
     descripcion: crudo.descripcion ?? null,
-    atendida_por: crudo.atendida_por ?? null, // null = alerta sin atender
+    atendida_por: crudo.atendida_por ?? null,
     resolvio: crudo.resolvio ?? null,
     tiempo_respuesta_seg: aSegundos(crudo.tiempo_respuesta), // null => "—"
   };
 }
 
-// Respuesta paginada de Laravel: { data: [...], meta: {...}, links: {...} }
 function adaptarPagina(respuesta, paginaPedida) {
   const lista = Array.isArray(respuesta) ? respuesta : (respuesta?.data ?? []);
   const meta = respuesta?.meta ?? {};
@@ -143,15 +128,6 @@ function adaptarPagina(respuesta, paginaPedida) {
   };
 }
 
-/* ------------------------------------------------------------------ */
-/* Funciones que usa la página                                         */
-/* ------------------------------------------------------------------ */
-
-/**
- * KPIs + desglose por categoría (K1).
- * @param {object} filtros  { desde, hasta, busqueda, sala, enfermera }
- * @param {AbortSignal} signal
- */
 export async function obtenerReporte(filtros, signal) {
   const params = construirParams(filtros);
 
@@ -166,12 +142,6 @@ export async function obtenerReporte(filtros, signal) {
   };
 }
 
-/**
- * Sesiones históricas paginadas (K2).
- * @param {object} filtros
- * @param {{pagina?: number, porPagina?: number}} paginacion
- * @param {AbortSignal} signal
- */
 export async function obtenerSesiones(
   filtros,
   { pagina = 1, porPagina = SESIONES_POR_PAGINA } = {},
@@ -185,11 +155,7 @@ export async function obtenerSesiones(
   return adaptarPagina(respuesta, pagina);
 }
 
-/**
- * Auditoría de alertas de una sesión (K2).
- * @param {number|string} id  id de la sesión
- * @param {AbortSignal} signal
- */
+
 export async function obtenerAuditoriaSesion(id, signal) {
   const respuesta = await pedirJson(`/api/reportes/sesiones/${id}/alertas`, {
     signal,
@@ -197,4 +163,16 @@ export async function obtenerAuditoriaSesion(id, signal) {
 
   const lista = Array.isArray(respuesta) ? respuesta : (respuesta?.data ?? []);
   return lista.map(adaptarAlertaAuditoria);
+}
+
+export async function exportarReportePdf(filtros, signal) {
+  const blob = await pedirBlob("/api/reportes/exportar", {
+    params: construirParams(filtros),
+    signal,
+  });
+
+  if (!blob.type.includes("pdf")) {
+    throw new Error("La respuesta del servidor no es un PDF.");
+  }
+  return blob;
 }
