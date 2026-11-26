@@ -407,7 +407,7 @@ body {
   border-bottom: none;
 }
 
-.tabla-lecturas tbody tr:first-child td {
+.tabla-lecturas--en-vivo tbody tr:first-child td {
   background: #f2f8fd;
   font-weight: 600;
   color: var(--color-secundario, #1a365d);
@@ -565,4 +565,83 @@ body {
   .grafica-goteo-lienzo {
     height: 200px;
   }
+}
+
+.controles-historial {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.selector-cantidad {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+  color: #64748b;
+}
+
+.selector-cantidad select {
+  padding: 4px 8px;
+  border: 1px solid #dbe3ee;
+  border-radius: 8px;
+  background: #ffffff;
+  font: inherit;
+  font-weight: 600;
+  color: var(--color-secundario, #1a365d);
+  cursor: pointer;
+}
+
+.selector-cantidad select:focus-visible,
+.boton-pagina:focus-visible {
+  outline: 2px solid var(--color-primario, #5a9bd5);
+  outline-offset: 2px;
+}
+
+.envoltura-tabla-lecturas--actualizando {
+  opacity: 0.55;
+  transition: opacity 0.15s ease;
+}
+
+.aviso-historial-anterior {
+  margin: 10px 0 0;
+  font-size: 0.75rem;
+  color: #92400e;
+}
+
+.paginacion-historial {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+.boton-pagina {
+  padding: 6px 12px;
+  border: 1px solid #dbe3ee;
+  border-radius: 8px;
+  background: #ffffff;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-secundario, #1a365d);
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.boton-pagina:hover:not(:disabled) {
+  background: #eef4fb;
+}
+
+.boton-pagina:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.texto-pagina {
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  color: #64748b;
 }

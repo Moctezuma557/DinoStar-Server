@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import Icono from "../components/Icono";
 import GraficaGoteo from "../components/GraficaGoteo";
@@ -14,6 +15,10 @@ const ETIQUETAS_GOTEO = {
   NORMAL_GOTEO: "Macrogoteo",
   MICRO_GOTEO: "Microgoteo",
 };
+
+/** Opciones del selector de registros por página. */
+const CANTIDADES_POR_PAGINA = [10, 25, 50, 100];
+const CANTIDAD_POR_DEFECTO = 25;
 
 function mililitrosPorHora(gotasPorMin, modoGoteo) {
   const factor = FACTOR_GOTEO[modoGoteo];
@@ -52,7 +57,6 @@ function formatearMarca(iso) {
   });
 }
 
-/** "cama-01" → "Cama-01" */
 function etiquetaCama(cama) {
   if (!cama) return "Sin cama";
   return cama.charAt(0).toUpperCase() + cama.slice(1);
@@ -68,14 +72,31 @@ function acotar(valor, minimo, maximo) {
   return Math.min(maximo, Math.max(minimo, valor));
 }
 
-function HistorialLecturas({ lecturas, modoGoteo, desactualizado }) {
-  if (lecturas.length === 0) {
+function HistorialLecturas({
+  lecturas,
+  total,
+  cantidad,
+  pagina,
+  modoGoteo,
+  actualizando,
+  desactualizado,
+  onCambiarCantidad,
+  onCambiarPagina,
+}) {
+  if (total === 0) {
     return (
       <p className="estado-vacio-historial">
-        Todavía no hay lecturas registradas para esta sesión.
+        {desactualizado
+          ? "No se pudieron cargar las lecturas. Se reintentará en unos segundos."
+          : "Todavía no hay lecturas registradas para esta sesión."}
       </p>
     );
   }
+
+  const totalPaginas = Math.max(1, Math.ceil(total / cantidad));
+  const enVivo = pagina === 1;
+  const primero = (pagina - 1) * cantidad + 1;
+  const ultimo = primero + lecturas.length - 1;
 
   const masRecientesPrimero = [...lecturas].reverse();
 
@@ -83,19 +104,44 @@ function HistorialLecturas({ lecturas, modoGoteo, desactualizado }) {
     <div className="seccion-historial">
       <div className="cabecera-historial">
         <span className="label-metrica">HISTORIAL DE LECTURAS</span>
-        {desactualizado ? (
-          <span className="chip-desactualizado" role="alert">
-            Sin conexión · datos de la última lectura recibida
-          </span>
-        ) : (
-          <span className="chip-actualizacion">
-            {lecturas.length} {lecturas.length === 1 ? "registro" : "registros"}
-          </span>
-        )}
+
+        <div className="controles-historial">
+          <label className="selector-cantidad">
+            Mostrar
+            <select
+              value={cantidad}
+              onChange={(evento) => onCambiarCantidad(Number(evento.target.value))}
+            >
+              {CANTIDADES_POR_PAGINA.map((opcion) => (
+                <option key={opcion} value={opcion}>
+                  {opcion}
+                </option>
+              ))}
+            </select>
+            por página
+          </label>
+
+          {desactualizado ? (
+            <span className="chip-desactualizado" role="alert">
+              Sin conexión · datos de la última lectura recibida
+            </span>
+          ) : (
+            <span className="chip-actualizacion">
+              {enVivo ? "En vivo · " : ""}
+              {primero}–{ultimo} de {total}
+            </span>
+          )}
+        </div>
       </div>
 
-      <div className="envoltura-tabla-lecturas">
-        <table className="tabla-lecturas">
+      <div
+        className={`envoltura-tabla-lecturas${
+          actualizando ? " envoltura-tabla-lecturas--actualizando" : ""
+        }`}
+        aria-busy={actualizando}
+      >
+        {}
+        <table className={`tabla-lecturas${enVivo ? " tabla-lecturas--en-vivo" : ""}`}>
           <thead>
             <tr>
               <th scope="col">Hora</th>
@@ -121,19 +167,73 @@ function HistorialLecturas({ lecturas, modoGoteo, desactualizado }) {
           </tbody>
         </table>
       </div>
+
+      {!enVivo && (
+        <p className="aviso-historial-anterior">
+          Estás viendo registros anteriores: esta página no se actualiza sola.
+          Las métricas de arriba sí siguen en vivo.
+        </p>
+      )}
+
+      {totalPaginas > 1 && (
+        <nav className="paginacion-historial" aria-label="Páginas del historial de lecturas">
+          <button
+            type="button"
+            className="boton-pagina"
+            onClick={() => onCambiarPagina(1)}
+            disabled={enVivo}
+          >
+            Lo más reciente
+          </button>
+          <button
+            type="button"
+            className="boton-pagina"
+            onClick={() => onCambiarPagina(pagina - 1)}
+            disabled={enVivo}
+          >
+            ‹ Más recientes
+          </button>
+          <span className="texto-pagina" aria-live="polite">
+            Página {pagina} de {totalPaginas}
+          </span>
+          <button
+            type="button"
+            className="boton-pagina"
+            onClick={() => onCambiarPagina(pagina + 1)}
+            disabled={pagina >= totalPaginas}
+          >
+            Anteriores ›
+          </button>
+        </nav>
+      )}
     </div>
   );
 }
+
 export default function Paciente() {
   const { id } = useParams();
 
   const { detalle, enfermera, cargando, error } = usePacienteDetalle(id);
+  const [vista, setVista] = useState({ id, cantidad: CANTIDAD_POR_DEFECTO, pagina: 1 });
+  const cantidad = vista.cantidad;
+  const pagina = vista.id === id ? vista.pagina : 1;
 
-  const { lecturas, error: errorLecturas } = useLecturas(
-    detalle?.sesion?.id ?? null,
-    detalle?.lecturas ?? []
-  );
+  const {
+    lecturas,
+    total,
+    ultima: ultimaViva,
+    cargando: cargandoLecturas,
+    actualizando,
+    error: errorLecturas,
+  } = useLecturas(detalle?.sesion?.id ?? null, { cantidad, pagina });
 
+  function cambiarCantidad(nuevaCantidad) {
+    setVista({ id, cantidad: nuevaCantidad, pagina: 1 });
+  }
+
+  function cambiarPagina(nuevaPagina) {
+    setVista({ id, cantidad, pagina: nuevaPagina });
+  }
 
   if (cargando) {
     return (
@@ -183,9 +283,10 @@ export default function Paciente() {
     );
   }
 
-  /* --------------------------- Derivados -------------------------- */
-
-  const ultima = lecturas.length > 0 ? lecturas[lecturas.length - 1] : null;
+  const lecturasDetalle = detalle?.lecturas ?? [];
+  const ultima =
+    ultimaViva ??
+    (lecturasDetalle.length > 0 ? lecturasDetalle[lecturasDetalle.length - 1] : null);
 
   const volRestante = ultima?.volRestante ?? sesion.volTotal;
   const volInfundido = Math.max(0, sesion.volTotal - volRestante);
@@ -206,10 +307,8 @@ export default function Paciente() {
   const factor = FACTOR_GOTEO[sesion.modoGoteo];
   const estaActiva = sesion.estado === "ACTIVA";
 
-
   return (
     <div className="contenedor-paciente-vista">
-      {}
       <nav className="barra-navegacion-paciente" aria-label="Navegación del detalle">
         <Link to="/pacientes" className="boton-elegir-otro">
           <Icono nombre="flechaIzquierda" tamano={16} />
@@ -275,7 +374,6 @@ export default function Paciente() {
                 {numero(sesion.volTotal, 0)} ml
               </span>
               <div className="liquido-nivel">
-                {}
                 <span className="porcentaje-texto">
                   {Math.floor(porcentajeRestante)}%
                 </span>
@@ -390,15 +488,30 @@ export default function Paciente() {
             </div>
           </div>
         </div>
-        <GraficaGoteo
-          lecturas={lecturas}
-          desactualizado={Boolean(errorLecturas)}
-        />
-        <HistorialLecturas
-          lecturas={lecturas}
-          modoGoteo={sesion.modoGoteo}
-          desactualizado={Boolean(errorLecturas)}
-        />
+
+        {cargandoLecturas ? (
+          <p className="estado-vacio-historial">Cargando lecturas…</p>
+        ) : (
+          <>
+            {}
+            <GraficaGoteo
+              lecturas={lecturas}
+              desactualizado={Boolean(errorLecturas)}
+            />
+
+            <HistorialLecturas
+              lecturas={lecturas}
+              total={total}
+              cantidad={cantidad}
+              pagina={pagina}
+              modoGoteo={sesion.modoGoteo}
+              actualizando={actualizando}
+              desactualizado={Boolean(errorLecturas)}
+              onCambiarCantidad={cambiarCantidad}
+              onCambiarPagina={cambiarPagina}
+            />
+          </>
+        )}
       </div>
     </div>
   );
