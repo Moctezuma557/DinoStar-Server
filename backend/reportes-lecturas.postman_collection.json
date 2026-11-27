@@ -1,0 +1,3608 @@
+{
+  "info": {
+    "name": "DinoStar — Reportes y lecturas B3 (#147)",
+    "description": "Contratos K1, K2, B2 y K3 de Develop eb59136. Ejecutar COMPLETA, en orden, una iteración y sin entorno para el local predeterminado. base_url=http://127.0.0.1:8000; AUTH_PROTEGER_RUTAS=false; requiere un paciente activo con sesión ACTIVA y sala asignada. Descubre IDs y fecha, captura las lecturas y recorre el historial completo por GET; no editar el JSON. Selecciona automáticamente un ID de sesión ausente. Mantener telemetría y datos estables. Solo GET; pacientes puede generar auditoría del servidor. No crea, edita ni elimina datos de dominio. Para protección activa proporcionar token local por entorno/--env-var, nunca versionarlo. Las respuestas guardadas son ejemplos ilustrativos de contrato, no resultados de una ejecución. Ver API_REPORTES.md y API_SESIONES.md para contratos, requisitos, comandos y alcance de verificación.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://127.0.0.1:8000",
+      "type": "string",
+      "description": "URL del backend sin barra final. El valor predeterminado funciona con Docker Compose local."
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string",
+      "description": "Opcional: token Bearer para AUTH_PROTEGER_RUTAS=true. Mantener vacío en Git; usar entorno local."
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "const token = pm.variables.get('token');",
+          "if (token) { pm.request.headers.upsert({key: 'Authorization', value: 'Bearer ' + token}); }"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "00 Preparación automática",
+      "description": "Ejecutar primero. Detiene el recorrido con prueba fallida si falta el paciente/sesión de prueba; no salta casos para simular aprobación.",
+      "item": [
+        {
+          "name": "01 Descubrir paciente y sala",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/pacientes",
+            "description": "Preparación automática. Selecciona el primer paciente activo con sesión ACTIVA, ID representable y sala asignada. GET /pacientes puede generar un registro de auditoría en el servidor."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "for (const key of ['b3_paciente_id', 'b3_sala_uri', 'b3_sala_sin_coincidencias_uri', 'b3_sesion_id', 'b3_enfermera_id', 'b3_fecha', 'b3_lecturas', 'b3_historial', 'b3_hist_page', 'b3_sesion_ausente_id', 'b3_paciente_nombre', 'b3_enfermera_nombre', 'b3_sesion_auditoria_id', 'b3_numero_alertas_auditoria']) {",
+                  "  pm.collectionVariables.unset(key);",
+                  "}",
+                  "pm.collectionVariables.set('b3_hist_page', '1');"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Content-Type JSON', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json'));",
+                  "if (pm.response.code !== 200) {",
+                  "  pm.execution.setNextRequest(null);",
+                  "} else {",
+                  "  const body = pm.response.json();",
+                  "  const filas = Array.isArray(body.data) ? body.data : [];",
+                  "  const p = filas.find(r => Number.isSafeInteger(r.id) && Number.isSafeInteger(r.enfermera_id) && typeof r.sala === 'string' && r.sala.length > 0);",
+                  "  pm.test('Hay paciente activo con sesión y sala para probar sin editar IDs', () => {",
+                  "    pm.expect(p, 'Se requiere un paciente activo con sesión ACTIVA y sala asignada; la colección no crea datos.').to.be.an('object');",
+                  "  });",
+                  "  if (!p) {",
+                  "    pm.execution.setNextRequest(null);",
+                  "  } else {",
+                  "    pm.collectionVariables.set('b3_paciente_id', String(p.id));",
+                  "    pm.collectionVariables.set('b3_sala_uri', encodeURIComponent(p.sala));",
+                  "    const otraSala = p.sala === 'B3 sin coincidencias' ? 'B3 otra sala' : 'B3 sin coincidencias';",
+                  "    pm.collectionVariables.set('b3_sala_sin_coincidencias_uri', encodeURIComponent(otraSala));",
+                  "  }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "02 Capturar sesión y lecturas de referencia",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/pacientes/{{b3_paciente_id}}",
+            "description": "Obtiene data.sesion.id, no data.id. Conserva las lecturas iniciales para comprobar offsets y serie completa. No modifica sesiones/lecturas; el servidor puede auditar esta consulta."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Content-Type JSON', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json'));",
+                  "if (pm.response.code !== 200) {",
+                  "  pm.execution.setNextRequest(null);",
+                  "} else {",
+                  "  const p = pm.response.json().data;",
+                  "  const s = p && p.sesion;",
+                  "  const valido = !!s && Number.isSafeInteger(s.id) && Number.isSafeInteger(s.enfermera_id) && Array.isArray(s.lecturas) && /^\\d{4}-\\d{2}-\\d{2}T/.test(s.inicio);",
+                  "  pm.test('Detalle contiene sesión, fecha y lecturas utilizables', () => pm.expect(valido).to.eql(true));",
+                  "  if (!valido) {",
+                  "    pm.execution.setNextRequest(null);",
+                  "  } else {",
+                  "    pm.collectionVariables.set('b3_sesion_id', String(s.id));",
+                  "    pm.collectionVariables.set('b3_enfermera_id', String(s.enfermera_id));",
+                  "    pm.collectionVariables.set('b3_fecha', s.inicio.slice(0, 10));",
+                  "    pm.collectionVariables.set('b3_sala_uri', encodeURIComponent(p.sala));",
+                  "    const otraSala = p.sala === 'B3 sin coincidencias' ? 'B3 otra sala' : 'B3 sin coincidencias';",
+                  "    pm.collectionVariables.set('b3_sala_sin_coincidencias_uri', encodeURIComponent(otraSala));",
+                  "    const lecturas = s.lecturas.map(r => ({",
+                  "      gotas_por_min: r.gotas_por_min, vol_restante: r.vol_restante,",
+                  "      tiempo_restante_min: r.tiempo_restante_min, timestamp_dispositivo: r.timestamp_dispositivo",
+                  "    }));",
+                  "    pm.collectionVariables.set('b3_lecturas', JSON.stringify(lecturas));",
+                  "    pm.test('Referencia ordenada por timestamp del dispositivo', () => {",
+                  "      for (let i = 1; i < lecturas.length; i++) {",
+                  "        pm.expect(lecturas[i - 1].timestamp_dispositivo <= lecturas[i].timestamp_dispositivo).to.eql(true);",
+                  "      }",
+                  "    });",
+                  "  }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "03 Historial completo de referencia (paginado)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/reportes/sesiones?per_page=100&page={{b3_hist_page}}",
+            "description": "Recorre todas las páginas mediante GET y captura el historial completo como referencia. Elige una sesión para auditoría y un ID ausente sin asumir IDs fijos. Mantener los datos estables durante el recorrido."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Content-Type JSON', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json'));",
+                  "if (pm.response.code !== 200) {",
+                  "  pm.execution.setNextRequest(null);",
+                  "} else {",
+                  "  const body = pm.response.json();",
+                  "  const valido = Array.isArray(body.data) && body.meta && Number.isInteger(body.meta.last_page);",
+                  "  pm.test('Historial paginado disponible para preparar los casos de K2', () => pm.expect(valido).to.eql(true));",
+                  "  if (!valido) {",
+                  "    pm.execution.setNextRequest(null);",
+                  "  } else {",
+                  "    pm.test('Página de referencia, campos y orden descendente', () => {",
+                  "      pm.expect(body.meta.current_page).to.eql(Number(pm.collectionVariables.get('b3_hist_page')));",
+                  "      pm.expect(body.meta.per_page).to.eql(100);",
+                  "      for (const r of body.data) { ",
+                  "    pm.expect(r).to.have.all.keys('id', 'paciente', 'enfermera', 'ubicacion', 'inicio', 'fin', 'duracion_segundos', 'tipo_solucion', 'vol_total', 'numero_alertas', 'estado');",
+                  "    pm.expect(Number.isSafeInteger(r.id)).to.eql(true);",
+                  "    pm.expect(r.paciente).to.be.a('string');",
+                  "    pm.expect(r.enfermera).to.be.a('string');",
+                  "    pm.expect(r.ubicacion).to.have.all.keys('sala', 'numero_cama');",
+                  "    pm.expect(r.inicio).to.match(/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{6}Z$/);",
+                  "    if (r.fin !== null) pm.expect(r.fin).to.match(/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{6}Z$/);",
+                  "    pm.expect(r.duracion_segundos === null || Number.isFinite(r.duracion_segundos)).to.eql(true);",
+                  "    pm.expect(r.tipo_solucion === null || typeof r.tipo_solucion === 'string').to.eql(true);",
+                  "    pm.expect(r.vol_total === null || Number.isFinite(r.vol_total)).to.eql(true);",
+                  "    pm.expect(Number.isInteger(r.numero_alertas) && r.numero_alertas >= 0).to.eql(true);",
+                  "    pm.expect(r.estado).to.be.oneOf(['ACTIVA', 'PAUSADA', 'FINALIZADA']);",
+                  "    if (r.fin === null) pm.expect(r.duracion_segundos).to.eql(null);",
+                  " }",
+                  "    });",
+                  "    const acumuladas = JSON.parse(pm.collectionVariables.get('b3_historial') || '[]').concat(body.data);",
+                  "    pm.collectionVariables.set('b3_historial', JSON.stringify(acumuladas));",
+                  "    if (body.meta.current_page < body.meta.last_page) {",
+                  "      pm.collectionVariables.set('b3_hist_page', String(body.meta.current_page + 1));",
+                  "      pm.execution.setNextRequest(pm.info.requestName);",
+                  "    } else {",
+                  "      const ids = new Set(acumuladas.map(r => r.id));",
+                  "      const elegida = acumuladas.find(r => String(r.id) === pm.collectionVariables.get('b3_sesion_id'));",
+                  "      pm.test('Referencia completa, sin sesiones duplicadas y con la sesión descubierta', () => {",
+                  "        pm.expect(acumuladas.length).to.eql(body.meta.total);",
+                  "        pm.expect(ids.size).to.eql(acumuladas.length);",
+                  "        pm.expect(elegida).to.be.an('object');",
+                  "        for (let i = 1; i < acumuladas.length; i++) {",
+                  "          const a = acumuladas[i - 1], b = acumuladas[i];",
+                  "          pm.expect(a.inicio > b.inicio || (a.inicio === b.inicio && a.id > b.id)).to.eql(true);",
+                  "        }",
+                  "      });",
+                  "      if (!elegida) {",
+                  "        pm.execution.setNextRequest(null);",
+                  "      } else {",
+                  "        let ausente = -1;",
+                  "        while (ids.has(ausente)) ausente--;",
+                  "        pm.collectionVariables.set('b3_sesion_ausente_id', String(ausente));",
+                  "        pm.collectionVariables.set('b3_paciente_nombre', elegida.paciente);",
+                  "        pm.collectionVariables.set('b3_enfermera_nombre', elegida.enfermera);",
+                  "        const auditada = acumuladas.find(r => r.numero_alertas > 0) || elegida;",
+                  "        pm.collectionVariables.set('b3_sesion_auditoria_id', String(auditada.id));",
+                  "        pm.collectionVariables.set('b3_numero_alertas_auditoria', String(auditada.numero_alertas));",
+                  "      }",
+                  "    }",
+                  "  }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "01 Reportes y PDF",
+      "description": "Respuestas correctas y vacías de K1 y B2; la preparación obtiene los filtros automáticamente.",
+      "item": [
+        {
+          "name": "04 Resumen general",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/reportes/resumen",
+            "description": "Contrato K1 integrado. Comprueba el envoltorio data y los cuatro KPIs."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "  pm.test('Content-Type JSON', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json'));",
+                  "  const body = pm.response.json();",
+                  "  pm.test('Resumen conserva exactamente los cuatro KPIs', () => {",
+                  "    pm.expect(body).to.have.all.keys('data');",
+                  "    pm.expect(body.data).to.have.all.keys('total_sesiones', 'sesiones_completadas', 'sesiones_con_alertas', 'tiempo_promedio_respuesta');",
+                  "    const d = body.data;",
+                  "    for (const n of [d.total_sesiones, d.sesiones_con_alertas, d.sesiones_completadas.cantidad]) {",
+                  "      pm.expect(Number.isInteger(n) && n >= 0).to.eql(true);",
+                  "    }",
+                  "    pm.expect(d.sesiones_completadas).to.have.all.keys('cantidad', 'porcentaje');",
+                  "    pm.expect(d.sesiones_completadas.cantidad).to.be.at.most(d.total_sesiones);",
+                  "    const esperado = d.total_sesiones === 0 ? 0 : Math.round(10000 * d.sesiones_completadas.cantidad / d.total_sesiones) / 100;",
+                  "    pm.expect(d.sesiones_completadas.porcentaje).to.be.closeTo(esperado, 0.000001);",
+                  "    pm.expect(d.tiempo_promedio_respuesta === null || Number.isFinite(d.tiempo_promedio_respuesta)).to.eql(true);",
+                  "  });",
+                  "  ",
+                  "  ",
+                  "}",
+                  "if (pm.response.code === 200) {",
+                  "  pm.test('Total de sesiones coincide con el historial completo de K2', () => pm.expect(pm.response.json().data.total_sesiones).to.eql(JSON.parse(pm.collectionVariables.get('b3_historial')).length));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "05 Categorías generales",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/reportes/alertas-categoria",
+            "description": "Verifica las tres categorías exactas y permite porcentajes que sumen menos de 100 %."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "  pm.test('Content-Type JSON', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json'));",
+                  "  const body = pm.response.json();",
+                  "  pm.test('Tres categorías ordenadas con campos y tipos correctos', () => {",
+                  "    pm.expect(body).to.have.all.keys('data');",
+                  "    pm.expect(body.data).to.be.an('array').with.lengthOf(3);",
+                  "    pm.expect(body.data.map(r => r.tipo)).to.deep.eql(['GOTEO_LENTO', 'FIN_BOLSA', 'GOTEO_RAPIDO']);",
+                  "    for (const r of body.data) {",
+                  "      pm.expect(r).to.have.all.keys('tipo', 'cantidad', 'porcentaje', 'tiempo_promedio_resolucion');",
+                  "      pm.expect(Number.isInteger(r.cantidad) && r.cantidad >= 0).to.eql(true);",
+                  "      pm.expect(r.porcentaje).to.be.a('number').within(0, 100);",
+                  "      pm.expect(r.tiempo_promedio_resolucion === null || Number.isFinite(r.tiempo_promedio_resolucion)).to.eql(true);",
+                  "    }",
+                  "    pm.expect(body.data.reduce((s, r) => s + r.porcentaje, 0)).to.be.at.most(100.02);",
+                  "  });",
+                  "  ",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "06 Descargar PDF general",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/reportes/exportar",
+            "description": "Verifica respuesta binaria, descarga y cabeceras. Revisar visualmente el contenido con Preview/Save Response."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "  pm.test('Content-Type PDF', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/pdf'));",
+                  "  pm.test('Archivo descargable con nombre de reporte', () => {",
+                  "    pm.expect(pm.response.headers.get('Content-Disposition')).to.match(/^attachment\\b.*filename=\"?dinostar-reporte-\\d{8}-\\d{6}\\.pdf\"?/i);",
+                  "  });",
+                  "  pm.test('Firma PDF y marcador de cierre', () => {",
+                  "    const contenido = pm.response.text();",
+                  "    pm.expect(contenido.slice(0, 5)).to.eql('%PDF-');",
+                  "    pm.expect(contenido.trimEnd().endsWith('%%EOF')).to.eql(true);",
+                  "  });",
+                  "  pm.test('Respuesta privada sin almacenamiento y sin sniffing', () => {",
+                  "    pm.expect(pm.response.headers.get('Cache-Control')).to.include('private').and.include('no-store');",
+                  "    pm.expect(pm.response.headers.get('X-Content-Type-Options')).to.eql('nosniff');",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "07 Resumen con los cinco filtros",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/reportes/resumen?fecha_inicio={{b3_fecha}}&fecha_fin={{b3_fecha}}&paciente_id={{b3_paciente_id}}&sala={{b3_sala_uri}}&enfermera_id={{b3_enfermera_id}}",
+            "description": "Fechas del día de inicio de la sesión descubierta, paciente, sala y enfermera. Incluye al menos esa sesión."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "  pm.test('Content-Type JSON', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json'));",
+                  "  const body = pm.response.json();",
+                  "  pm.test('Resumen conserva exactamente los cuatro KPIs', () => {",
+                  "    pm.expect(body).to.have.all.keys('data');",
+                  "    pm.expect(body.data).to.have.all.keys('total_sesiones', 'sesiones_completadas', 'sesiones_con_alertas', 'tiempo_promedio_respuesta');",
+                  "    const d = body.data;",
+                  "    for (const n of [d.total_sesiones, d.sesiones_con_alertas, d.sesiones_completadas.cantidad]) {",
+                  "      pm.expect(Number.isInteger(n) && n >= 0).to.eql(true);",
+                  "    }",
+                  "    pm.expect(d.sesiones_completadas).to.have.all.keys('cantidad', 'porcentaje');",
+                  "    pm.expect(d.sesiones_completadas.cantidad).to.be.at.most(d.total_sesiones);",
+                  "    const esperado = d.total_sesiones === 0 ? 0 : Math.round(10000 * d.sesiones_completadas.cantidad / d.total_sesiones) / 100;",
+                  "    pm.expect(d.sesiones_completadas.porcentaje).to.be.closeTo(esperado, 0.000001);",
+                  "    pm.expect(d.tiempo_promedio_respuesta === null || Number.isFinite(d.tiempo_promedio_respuesta)).to.eql(true);",
+                  "  });",
+                  "  ",
+                  "  pm.test('Los cinco filtros incluyen la sesión descubierta', () => pm.expect(body.data.total_sesiones).to.be.at.least(1));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "08 Categorías con los cinco filtros",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/reportes/alertas-categoria?fecha_inicio={{b3_fecha}}&fecha_fin={{b3_fecha}}&paciente_id={{b3_paciente_id}}&sala={{b3_sala_uri}}&enfermera_id={{b3_enfermera_id}}",
+            "description": "Mismos filtros públicos; los parámetros de fecha usan guion bajo."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "  pm.test('Content-Type JSON', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json'));",
+                  "  const body = pm.response.json();",
+                  "  pm.test('Tres categorías ordenadas con campos y tipos correctos', () => {",
+                  "    pm.expect(body).to.have.all.keys('data');",
+                  "    pm.expect(body.data).to.be.an('array').with.lengthOf(3);",
+                  "    pm.expect(body.data.map(r => r.tipo)).to.deep.eql(['GOTEO_LENTO', 'FIN_BOLSA', 'GOTEO_RAPIDO']);",
+                  "    for (const r of body.data) {",
+                  "      pm.expect(r).to.have.all.keys('tipo', 'cantidad', 'porcentaje', 'tiempo_promedio_resolucion');",
+                  "      pm.expect(Number.isInteger(r.cantidad) && r.cantidad >= 0).to.eql(true);",
+                  "      pm.expect(r.porcentaje).to.be.a('number').within(0, 100);",
+                  "      pm.expect(r.tiempo_promedio_resolucion === null || Number.isFinite(r.tiempo_promedio_resolucion)).to.eql(true);",
+                  "    }",
+                  "    pm.expect(body.data.reduce((s, r) => s + r.porcentaje, 0)).to.be.at.most(100.02);",
+                  "  });",
+                  "  ",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "09 PDF con los cinco filtros",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/reportes/exportar?fecha_inicio={{b3_fecha}}&fecha_fin={{b3_fecha}}&paciente_id={{b3_paciente_id}}&sala={{b3_sala_uri}}&enfermera_id={{b3_enfermera_id}}",
+            "description": "Mismos filtros. El PDF no se pagina y debe mostrar el periodo y los IDs descubiertos."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "  pm.test('Content-Type PDF', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/pdf'));",
+                  "  pm.test('Archivo descargable con nombre de reporte', () => {",
+                  "    pm.expect(pm.response.headers.get('Content-Disposition')).to.match(/^attachment\\b.*filename=\"?dinostar-reporte-\\d{8}-\\d{6}\\.pdf\"?/i);",
+                  "  });",
+                  "  pm.test('Firma PDF y marcador de cierre', () => {",
+                  "    const contenido = pm.response.text();",
+                  "    pm.expect(contenido.slice(0, 5)).to.eql('%PDF-');",
+                  "    pm.expect(contenido.trimEnd().endsWith('%%EOF')).to.eql(true);",
+                  "  });",
+                  "  pm.test('Respuesta privada sin almacenamiento y sin sniffing', () => {",
+                  "    pm.expect(pm.response.headers.get('Cache-Control')).to.include('private').and.include('no-store');",
+                  "    pm.expect(pm.response.headers.get('X-Content-Type-Options')).to.eql('nosniff');",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "10 Resumen sin coincidencias",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/reportes/resumen?paciente_id={{b3_paciente_id}}&sala={{b3_sala_sin_coincidencias_uri}}",
+            "description": "Combina el paciente real con una sala distinta de la suya: garantiza cero coincidencias sin asumir fechas o IDs ausentes."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "  pm.test('Content-Type JSON', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json'));",
+                  "  const body = pm.response.json();",
+                  "  pm.test('Resumen conserva exactamente los cuatro KPIs', () => {",
+                  "    pm.expect(body).to.have.all.keys('data');",
+                  "    pm.expect(body.data).to.have.all.keys('total_sesiones', 'sesiones_completadas', 'sesiones_con_alertas', 'tiempo_promedio_respuesta');",
+                  "    const d = body.data;",
+                  "    for (const n of [d.total_sesiones, d.sesiones_con_alertas, d.sesiones_completadas.cantidad]) {",
+                  "      pm.expect(Number.isInteger(n) && n >= 0).to.eql(true);",
+                  "    }",
+                  "    pm.expect(d.sesiones_completadas).to.have.all.keys('cantidad', 'porcentaje');",
+                  "    pm.expect(d.sesiones_completadas.cantidad).to.be.at.most(d.total_sesiones);",
+                  "    const esperado = d.total_sesiones === 0 ? 0 : Math.round(10000 * d.sesiones_completadas.cantidad / d.total_sesiones) / 100;",
+                  "    pm.expect(d.sesiones_completadas.porcentaje).to.be.closeTo(esperado, 0.000001);",
+                  "    pm.expect(d.tiempo_promedio_respuesta === null || Number.isFinite(d.tiempo_promedio_respuesta)).to.eql(true);",
+                  "  });",
+                  "  pm.test('Filtros contradictorios: ceros y promedio null', () => {",
+                  "    pm.expect(body.data).to.deep.eql({total_sesiones: 0, sesiones_completadas: {cantidad: 0, porcentaje: 0}, sesiones_con_alertas: 0, tiempo_promedio_respuesta: null});",
+                  "  });",
+                  "  ",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": [
+            {
+              "name": "Sin coincidencias: contrato esperado",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": "{{base_url}}/api/reportes/resumen?paciente_id={{b3_paciente_id}}&sala={{b3_sala_sin_coincidencias_uri}}",
+                "description": "Combina el paciente real con una sala distinta de la suya: garantiza cero coincidencias sin asumir fechas o IDs ausentes."
+              },
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"data\": {\n    \"total_sesiones\": 0,\n    \"sesiones_completadas\": {\n      \"cantidad\": 0,\n      \"porcentaje\": 0\n    },\n    \"sesiones_con_alertas\": 0,\n    \"tiempo_promedio_respuesta\": null\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "11 Categorías sin coincidencias",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/reportes/alertas-categoria?paciente_id={{b3_paciente_id}}&sala={{b3_sala_sin_coincidencias_uri}}",
+            "description": "Espera tres filas con cantidades/porcentajes cero y promedios null."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "  pm.test('Content-Type JSON', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json'));",
+                  "  const body = pm.response.json();",
+                  "  pm.test('Tres categorías ordenadas con campos y tipos correctos', () => {",
+                  "    pm.expect(body).to.have.all.keys('data');",
+                  "    pm.expect(body.data).to.be.an('array').with.lengthOf(3);",
+                  "    pm.expect(body.data.map(r => r.tipo)).to.deep.eql(['GOTEO_LENTO', 'FIN_BOLSA', 'GOTEO_RAPIDO']);",
+                  "    for (const r of body.data) {",
+                  "      pm.expect(r).to.have.all.keys('tipo', 'cantidad', 'porcentaje', 'tiempo_promedio_resolucion');",
+                  "      pm.expect(Number.isInteger(r.cantidad) && r.cantidad >= 0).to.eql(true);",
+                  "      pm.expect(r.porcentaje).to.be.a('number').within(0, 100);",
+                  "      pm.expect(r.tiempo_promedio_resolucion === null || Number.isFinite(r.tiempo_promedio_resolucion)).to.eql(true);",
+                  "    }",
+                  "    pm.expect(body.data.reduce((s, r) => s + r.porcentaje, 0)).to.be.at.most(100.02);",
+                  "  });",
+                  "  pm.test('Sin coincidencias conserva las tres filas vacías', () => {",
+                  "    for (const r of body.data) { pm.expect(r.cantidad).to.eql(0); pm.expect(r.porcentaje).to.eql(0); pm.expect(r.tiempo_promedio_resolucion).to.eql(null); }",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": [
+            {
+              "name": "Sin coincidencias: tres categorías",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": "{{base_url}}/api/reportes/alertas-categoria?paciente_id={{b3_paciente_id}}&sala={{b3_sala_sin_coincidencias_uri}}",
+                "description": "Espera tres filas con cantidades/porcentajes cero y promedios null."
+              },
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"data\": [\n    {\n      \"tipo\": \"GOTEO_LENTO\",\n      \"cantidad\": 0,\n      \"porcentaje\": 0,\n      \"tiempo_promedio_resolucion\": null\n    },\n    {\n      \"tipo\": \"FIN_BOLSA\",\n      \"cantidad\": 0,\n      \"porcentaje\": 0,\n      \"tiempo_promedio_resolucion\": null\n    },\n    {\n      \"tipo\": \"GOTEO_RAPIDO\",\n      \"cantidad\": 0,\n      \"porcentaje\": 0,\n      \"tiempo_promedio_resolucion\": null\n    }\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "12 PDF sin coincidencias",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/reportes/exportar?paciente_id={{b3_paciente_id}}&sala={{b3_sala_sin_coincidencias_uri}}",
+            "description": "Debe seguir siendo un PDF descargable 200. Comprobar en Preview el mensaje: No se encontraron sesiones con los filtros seleccionados."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "  pm.test('Content-Type PDF', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/pdf'));",
+                  "  pm.test('Archivo descargable con nombre de reporte', () => {",
+                  "    pm.expect(pm.response.headers.get('Content-Disposition')).to.match(/^attachment\\b.*filename=\"?dinostar-reporte-\\d{8}-\\d{6}\\.pdf\"?/i);",
+                  "  });",
+                  "  pm.test('Firma PDF y marcador de cierre', () => {",
+                  "    const contenido = pm.response.text();",
+                  "    pm.expect(contenido.slice(0, 5)).to.eql('%PDF-');",
+                  "    pm.expect(contenido.trimEnd().endsWith('%%EOF')).to.eql(true);",
+                  "  });",
+                  "  pm.test('Respuesta privada sin almacenamiento y sin sniffing', () => {",
+                  "    pm.expect(pm.response.headers.get('Cache-Control')).to.include('private').and.include('no-store');",
+                  "    pm.expect(pm.response.headers.get('X-Content-Type-Options')).to.eql('nosniff');",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "02 Errores de filtros",
+      "description": "Respuestas 422 verificadas por estructura y campo; no depender del idioma de los mensajes.",
+      "item": [
+        {
+          "name": "13 Resumen: paciente inválido",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/reportes/resumen?paciente_id=abc",
+            "description": "Error esperado HTTP 422 en errors.paciente_id; nunca aceptar un PDF o un 500 para este caso."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 422', () => pm.response.to.have.status(422));",
+                  "pm.test('Content-Type JSON', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json'));",
+                  "if (pm.response.code === 422) {",
+                  "  pm.test('La validación identifica paciente_id', () => {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body).to.have.property('message').that.is.a('string');",
+                  "    pm.expect(body.errors).to.have.property('paciente_id').that.is.an('array').that.is.not.empty;",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": [
+            {
+              "name": "Ejemplo 422 (mensaje ilustrativo)",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": "{{base_url}}/api/reportes/resumen?paciente_id=abc",
+                "description": "Error esperado HTTP 422 en errors.paciente_id; nunca aceptar un PDF o un 500 para este caso."
+              },
+              "status": "Unprocessable Entity",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"message\": \"Valor inválido.\",\n  \"errors\": {\n    \"paciente_id\": [\n      \"Valor inválido.\"\n    ]\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "14 Categorías: paciente inválido",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/reportes/alertas-categoria?paciente_id=abc",
+            "description": "Error esperado HTTP 422 en errors.paciente_id; nunca aceptar un PDF o un 500 para este caso."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 422', () => pm.response.to.have.status(422));",
+                  "pm.test('Content-Type JSON', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json'));",
+                  "if (pm.response.code === 422) {",
+                  "  pm.test('La validación identifica paciente_id', () => {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body).to.have.property('message').that.is.a('string');",
+                  "    pm.expect(body.errors).to.have.property('paciente_id').that.is.an('array').that.is.not.empty;",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": [
+            {
+              "name": "Ejemplo 422 (mensaje ilustrativo)",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": "{{base_url}}/api/reportes/alertas-categoria?paciente_id=abc",
+                "description": "Error esperado HTTP 422 en errors.paciente_id; nunca aceptar un PDF o un 500 para este caso."
+              },
+              "status": "Unprocessable Entity",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"message\": \"Valor inválido.\",\n  \"errors\": {\n    \"paciente_id\": [\n      \"Valor inválido.\"\n    ]\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "15 PDF: paciente inválido",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/reportes/exportar?paciente_id=abc",
+            "description": "Error esperado HTTP 422 en errors.paciente_id; nunca aceptar un PDF o un 500 para este caso."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 422', () => pm.response.to.have.status(422));",
+                  "pm.test('Content-Type JSON', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json'));",
+                  "if (pm.response.code === 422) {",
+                  "  pm.test('La validación identifica paciente_id', () => {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body).to.have.property('message').that.is.a('string');",
+                  "    pm.expect(body.errors).to.have.property('paciente_id').that.is.an('array').that.is.not.empty;",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": [
+            {
+              "name": "Ejemplo 422 (mensaje ilustrativo)",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": "{{base_url}}/api/reportes/exportar?paciente_id=abc",
+                "description": "Error esperado HTTP 422 en errors.paciente_id; nunca aceptar un PDF o un 500 para este caso."
+              },
+              "status": "Unprocessable Entity",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"message\": \"Valor inválido.\",\n  \"errors\": {\n    \"paciente_id\": [\n      \"Valor inválido.\"\n    ]\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "16 Resumen: rango invertido",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/reportes/resumen?fecha_inicio=2026-11-30&fecha_fin=2026-11-01",
+            "description": "Error esperado HTTP 422 en errors.fecha_fin; nunca aceptar un PDF o un 500 para este caso."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 422', () => pm.response.to.have.status(422));",
+                  "pm.test('Content-Type JSON', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json'));",
+                  "if (pm.response.code === 422) {",
+                  "  pm.test('La validación identifica fecha_fin', () => {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body).to.have.property('message').that.is.a('string');",
+                  "    pm.expect(body.errors).to.have.property('fecha_fin').that.is.an('array').that.is.not.empty;",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": [
+            {
+              "name": "Ejemplo 422 (mensaje ilustrativo)",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": "{{base_url}}/api/reportes/resumen?fecha_inicio=2026-11-30&fecha_fin=2026-11-01",
+                "description": "Error esperado HTTP 422 en errors.fecha_fin; nunca aceptar un PDF o un 500 para este caso."
+              },
+              "status": "Unprocessable Entity",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"message\": \"Valor inválido.\",\n  \"errors\": {\n    \"fecha_fin\": [\n      \"Valor inválido.\"\n    ]\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "17 Categorías: fecha imposible",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/reportes/alertas-categoria?fecha_inicio=2026-02-30",
+            "description": "Error esperado HTTP 422 en errors.fecha_inicio; nunca aceptar un PDF o un 500 para este caso."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 422', () => pm.response.to.have.status(422));",
+                  "pm.test('Content-Type JSON', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json'));",
+                  "if (pm.response.code === 422) {",
+                  "  pm.test('La validación identifica fecha_inicio', () => {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body).to.have.property('message').that.is.a('string');",
+                  "    pm.expect(body.errors).to.have.property('fecha_inicio').that.is.an('array').that.is.not.empty;",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": [
+            {
+              "name": "Ejemplo 422 (mensaje ilustrativo)",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": "{{base_url}}/api/reportes/alertas-categoria?fecha_inicio=2026-02-30",
+                "description": "Error esperado HTTP 422 en errors.fecha_inicio; nunca aceptar un PDF o un 500 para este caso."
+              },
+              "status": "Unprocessable Entity",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"message\": \"Valor inválido.\",\n  \"errors\": {\n    \"fecha_inicio\": [\n      \"Valor inválido.\"\n    ]\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "18 PDF: enfermera fraccionaria",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/reportes/exportar?enfermera_id=1.5",
+            "description": "Error esperado HTTP 422 en errors.enfermera_id; nunca aceptar un PDF o un 500 para este caso."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 422', () => pm.response.to.have.status(422));",
+                  "pm.test('Content-Type JSON', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json'));",
+                  "if (pm.response.code === 422) {",
+                  "  pm.test('La validación identifica enfermera_id', () => {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body).to.have.property('message').that.is.a('string');",
+                  "    pm.expect(body.errors).to.have.property('enfermera_id').that.is.an('array').that.is.not.empty;",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": [
+            {
+              "name": "Ejemplo 422 (mensaje ilustrativo)",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": "{{base_url}}/api/reportes/exportar?enfermera_id=1.5",
+                "description": "Error esperado HTTP 422 en errors.enfermera_id; nunca aceptar un PDF o un 500 para este caso."
+              },
+              "status": "Unprocessable Entity",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"message\": \"Valor inválido.\",\n  \"errors\": {\n    \"enfermera_id\": [\n      \"Valor inválido.\"\n    ]\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "19 PDF: sala supera 50 caracteres",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/reportes/exportar?sala=SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS",
+            "description": "Error esperado HTTP 422 en errors.sala; nunca aceptar un PDF o un 500 para este caso."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 422', () => pm.response.to.have.status(422));",
+                  "pm.test('Content-Type JSON', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json'));",
+                  "if (pm.response.code === 422) {",
+                  "  pm.test('La validación identifica sala', () => {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body).to.have.property('message').that.is.a('string');",
+                  "    pm.expect(body.errors).to.have.property('sala').that.is.an('array').that.is.not.empty;",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": [
+            {
+              "name": "Ejemplo 422 (mensaje ilustrativo)",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": "{{base_url}}/api/reportes/exportar?sala=SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS",
+                "description": "Error esperado HTTP 422 en errors.sala; nunca aceptar un PDF o un 500 para este caso."
+              },
+              "status": "Unprocessable Entity",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"message\": \"Valor inválido.\",\n  \"errors\": {\n    \"sala\": [\n      \"Valor inválido.\"\n    ]\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "20 Resumen: ID fuera del rango",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/reportes/resumen?paciente_id=1000000000000000000",
+            "description": "Error esperado HTTP 422 en errors.paciente_id; nunca aceptar un PDF o un 500 para este caso."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 422', () => pm.response.to.have.status(422));",
+                  "pm.test('Content-Type JSON', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json'));",
+                  "if (pm.response.code === 422) {",
+                  "  pm.test('La validación identifica paciente_id', () => {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body).to.have.property('message').that.is.a('string');",
+                  "    pm.expect(body.errors).to.have.property('paciente_id').that.is.an('array').that.is.not.empty;",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": [
+            {
+              "name": "Ejemplo 422 (mensaje ilustrativo)",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": "{{base_url}}/api/reportes/resumen?paciente_id=1000000000000000000",
+                "description": "Error esperado HTTP 422 en errors.paciente_id; nunca aceptar un PDF o un 500 para este caso."
+              },
+              "status": "Unprocessable Entity",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"message\": \"Valor inválido.\",\n  \"errors\": {\n    \"paciente_id\": [\n      \"Valor inválido.\"\n    ]\n  }\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "03 Historial de sesiones (K2)",
+      "description": "Compara páginas y filtros con el historial completo capturado durante la preparación.",
+      "item": [
+        {
+          "name": "21 Historial por defecto: primera página de 10",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/reportes/sesiones",
+            "description": "A diferencia de lecturas, omitir page selecciona la primera página y per_page predeterminado es 10."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "  pm.test('Content-Type JSON', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json'));",
+                  "  const body = pm.response.json();",
+                  "  const referencia = JSON.parse(pm.collectionVariables.get('b3_historial'));",
+                  "  const esperado = referencia;",
+                  "  pm.test('Paginación, campos y tipos de sesiones históricas', () => {",
+                  "    pm.expect(body).to.have.all.keys('data', 'links', 'meta');",
+                  "    pm.expect(body.meta.current_page).to.eql(1);",
+                  "    pm.expect(body.meta.per_page).to.eql(10);",
+                  "    pm.expect(body.links).to.have.all.keys('first', 'last', 'prev', 'next');",
+                  "    for (const r of body.data) { ",
+                  "    pm.expect(r).to.have.all.keys('id', 'paciente', 'enfermera', 'ubicacion', 'inicio', 'fin', 'duracion_segundos', 'tipo_solucion', 'vol_total', 'numero_alertas', 'estado');",
+                  "    pm.expect(Number.isSafeInteger(r.id)).to.eql(true);",
+                  "    pm.expect(r.paciente).to.be.a('string');",
+                  "    pm.expect(r.enfermera).to.be.a('string');",
+                  "    pm.expect(r.ubicacion).to.have.all.keys('sala', 'numero_cama');",
+                  "    pm.expect(r.inicio).to.match(/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{6}Z$/);",
+                  "    if (r.fin !== null) pm.expect(r.fin).to.match(/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{6}Z$/);",
+                  "    pm.expect(r.duracion_segundos === null || Number.isFinite(r.duracion_segundos)).to.eql(true);",
+                  "    pm.expect(r.tipo_solucion === null || typeof r.tipo_solucion === 'string').to.eql(true);",
+                  "    pm.expect(r.vol_total === null || Number.isFinite(r.vol_total)).to.eql(true);",
+                  "    pm.expect(Number.isInteger(r.numero_alertas) && r.numero_alertas >= 0).to.eql(true);",
+                  "    pm.expect(r.estado).to.be.oneOf(['ACTIVA', 'PAUSADA', 'FINALIZADA']);",
+                  "    if (r.fin === null) pm.expect(r.duracion_segundos).to.eql(null);",
+                  " }",
+                  "  });",
+                  "  pm.test('Contenido y total coinciden con el historial de referencia', () => {",
+                  "    pm.expect(body.meta.total).to.eql(esperado.length);",
+                  "    pm.expect(body.meta.last_page).to.eql(Math.max(1, Math.ceil(esperado.length / 10)));",
+                  "    pm.expect(body.data).to.deep.eql(esperado.slice((1 - 1) * 10, 1 * 10));",
+                  "  });",
+                  "  pm.test('Enlaces conservan per_page y filtros enviados', () => {",
+                  "    const keys = [];",
+                  "    if (pm.request.url.toString().includes('per_page=')) keys.push('per_page');",
+                  "    for (const link of [body.links.first, body.links.last, body.links.prev, body.links.next].filter(Boolean)) {",
+                  "      for (const key of keys) pm.expect(link).to.match(new RegExp('[?&]' + key + '='));",
+                  "    }",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "22 Historial: per_page=1, page=1",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/reportes/sesiones?per_page=1&page=1",
+            "description": "Contrasta la primera fila y los metadatos con la referencia completa."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "  pm.test('Content-Type JSON', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json'));",
+                  "  const body = pm.response.json();",
+                  "  const referencia = JSON.parse(pm.collectionVariables.get('b3_historial'));",
+                  "  const esperado = referencia;",
+                  "  pm.test('Paginación, campos y tipos de sesiones históricas', () => {",
+                  "    pm.expect(body).to.have.all.keys('data', 'links', 'meta');",
+                  "    pm.expect(body.meta.current_page).to.eql(1);",
+                  "    pm.expect(body.meta.per_page).to.eql(1);",
+                  "    pm.expect(body.links).to.have.all.keys('first', 'last', 'prev', 'next');",
+                  "    for (const r of body.data) { ",
+                  "    pm.expect(r).to.have.all.keys('id', 'paciente', 'enfermera', 'ubicacion', 'inicio', 'fin', 'duracion_segundos', 'tipo_solucion', 'vol_total', 'numero_alertas', 'estado');",
+                  "    pm.expect(Number.isSafeInteger(r.id)).to.eql(true);",
+                  "    pm.expect(r.paciente).to.be.a('string');",
+                  "    pm.expect(r.enfermera).to.be.a('string');",
+                  "    pm.expect(r.ubicacion).to.have.all.keys('sala', 'numero_cama');",
+                  "    pm.expect(r.inicio).to.match(/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{6}Z$/);",
+                  "    if (r.fin !== null) pm.expect(r.fin).to.match(/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{6}Z$/);",
+                  "    pm.expect(r.duracion_segundos === null || Number.isFinite(r.duracion_segundos)).to.eql(true);",
+                  "    pm.expect(r.tipo_solucion === null || typeof r.tipo_solucion === 'string').to.eql(true);",
+                  "    pm.expect(r.vol_total === null || Number.isFinite(r.vol_total)).to.eql(true);",
+                  "    pm.expect(Number.isInteger(r.numero_alertas) && r.numero_alertas >= 0).to.eql(true);",
+                  "    pm.expect(r.estado).to.be.oneOf(['ACTIVA', 'PAUSADA', 'FINALIZADA']);",
+                  "    if (r.fin === null) pm.expect(r.duracion_segundos).to.eql(null);",
+                  " }",
+                  "  });",
+                  "  pm.test('Contenido y total coinciden con el historial de referencia', () => {",
+                  "    pm.expect(body.meta.total).to.eql(esperado.length);",
+                  "    pm.expect(body.meta.last_page).to.eql(Math.max(1, Math.ceil(esperado.length / 1)));",
+                  "    pm.expect(body.data).to.deep.eql(esperado.slice((1 - 1) * 1, 1 * 1));",
+                  "  });",
+                  "  pm.test('Enlaces conservan per_page y filtros enviados', () => {",
+                  "    const keys = [];",
+                  "    if (pm.request.url.toString().includes('per_page=')) keys.push('per_page');",
+                  "    for (const link of [body.links.first, body.links.last, body.links.prev, body.links.next].filter(Boolean)) {",
+                  "      for (const key of keys) pm.expect(link).to.match(new RegExp('[?&]' + key + '='));",
+                  "    }",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "23 Historial: per_page=1, page=2",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/reportes/sesiones?per_page=1&page=2",
+            "description": "Contrasta el offset exacto. Si no hay segunda fila, espera data vacío y conserva total."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "  pm.test('Content-Type JSON', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json'));",
+                  "  const body = pm.response.json();",
+                  "  const referencia = JSON.parse(pm.collectionVariables.get('b3_historial'));",
+                  "  const esperado = referencia;",
+                  "  pm.test('Paginación, campos y tipos de sesiones históricas', () => {",
+                  "    pm.expect(body).to.have.all.keys('data', 'links', 'meta');",
+                  "    pm.expect(body.meta.current_page).to.eql(2);",
+                  "    pm.expect(body.meta.per_page).to.eql(1);",
+                  "    pm.expect(body.links).to.have.all.keys('first', 'last', 'prev', 'next');",
+                  "    for (const r of body.data) { ",
+                  "    pm.expect(r).to.have.all.keys('id', 'paciente', 'enfermera', 'ubicacion', 'inicio', 'fin', 'duracion_segundos', 'tipo_solucion', 'vol_total', 'numero_alertas', 'estado');",
+                  "    pm.expect(Number.isSafeInteger(r.id)).to.eql(true);",
+                  "    pm.expect(r.paciente).to.be.a('string');",
+                  "    pm.expect(r.enfermera).to.be.a('string');",
+                  "    pm.expect(r.ubicacion).to.have.all.keys('sala', 'numero_cama');",
+                  "    pm.expect(r.inicio).to.match(/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{6}Z$/);",
+                  "    if (r.fin !== null) pm.expect(r.fin).to.match(/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{6}Z$/);",
+                  "    pm.expect(r.duracion_segundos === null || Number.isFinite(r.duracion_segundos)).to.eql(true);",
+                  "    pm.expect(r.tipo_solucion === null || typeof r.tipo_solucion === 'string').to.eql(true);",
+                  "    pm.expect(r.vol_total === null || Number.isFinite(r.vol_total)).to.eql(true);",
+                  "    pm.expect(Number.isInteger(r.numero_alertas) && r.numero_alertas >= 0).to.eql(true);",
+                  "    pm.expect(r.estado).to.be.oneOf(['ACTIVA', 'PAUSADA', 'FINALIZADA']);",
+                  "    if (r.fin === null) pm.expect(r.duracion_segundos).to.eql(null);",
+                  " }",
+                  "  });",
+                  "  pm.test('Contenido y total coinciden con el historial de referencia', () => {",
+                  "    pm.expect(body.meta.total).to.eql(esperado.length);",
+                  "    pm.expect(body.meta.last_page).to.eql(Math.max(1, Math.ceil(esperado.length / 1)));",
+                  "    pm.expect(body.data).to.deep.eql(esperado.slice((2 - 1) * 1, 2 * 1));",
+                  "  });",
+                  "  pm.test('Enlaces conservan per_page y filtros enviados', () => {",
+                  "    const keys = [];",
+                  "    if (pm.request.url.toString().includes('per_page=')) keys.push('per_page');",
+                  "    for (const link of [body.links.first, body.links.last, body.links.prev, body.links.next].filter(Boolean)) {",
+                  "      for (const key of keys) pm.expect(link).to.match(new RegExp('[?&]' + key + '='));",
+                  "    }",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "24 Historial: tamaño máximo de 100",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/reportes/sesiones?per_page=100&page=1",
+            "description": "Tamaño máximo válido, sin normalización."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "  pm.test('Content-Type JSON', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json'));",
+                  "  const body = pm.response.json();",
+                  "  const referencia = JSON.parse(pm.collectionVariables.get('b3_historial'));",
+                  "  const esperado = referencia;",
+                  "  pm.test('Paginación, campos y tipos de sesiones históricas', () => {",
+                  "    pm.expect(body).to.have.all.keys('data', 'links', 'meta');",
+                  "    pm.expect(body.meta.current_page).to.eql(1);",
+                  "    pm.expect(body.meta.per_page).to.eql(100);",
+                  "    pm.expect(body.links).to.have.all.keys('first', 'last', 'prev', 'next');",
+                  "    for (const r of body.data) { ",
+                  "    pm.expect(r).to.have.all.keys('id', 'paciente', 'enfermera', 'ubicacion', 'inicio', 'fin', 'duracion_segundos', 'tipo_solucion', 'vol_total', 'numero_alertas', 'estado');",
+                  "    pm.expect(Number.isSafeInteger(r.id)).to.eql(true);",
+                  "    pm.expect(r.paciente).to.be.a('string');",
+                  "    pm.expect(r.enfermera).to.be.a('string');",
+                  "    pm.expect(r.ubicacion).to.have.all.keys('sala', 'numero_cama');",
+                  "    pm.expect(r.inicio).to.match(/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{6}Z$/);",
+                  "    if (r.fin !== null) pm.expect(r.fin).to.match(/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{6}Z$/);",
+                  "    pm.expect(r.duracion_segundos === null || Number.isFinite(r.duracion_segundos)).to.eql(true);",
+                  "    pm.expect(r.tipo_solucion === null || typeof r.tipo_solucion === 'string').to.eql(true);",
+                  "    pm.expect(r.vol_total === null || Number.isFinite(r.vol_total)).to.eql(true);",
+                  "    pm.expect(Number.isInteger(r.numero_alertas) && r.numero_alertas >= 0).to.eql(true);",
+                  "    pm.expect(r.estado).to.be.oneOf(['ACTIVA', 'PAUSADA', 'FINALIZADA']);",
+                  "    if (r.fin === null) pm.expect(r.duracion_segundos).to.eql(null);",
+                  " }",
+                  "  });",
+                  "  pm.test('Contenido y total coinciden con el historial de referencia', () => {",
+                  "    pm.expect(body.meta.total).to.eql(esperado.length);",
+                  "    pm.expect(body.meta.last_page).to.eql(Math.max(1, Math.ceil(esperado.length / 100)));",
+                  "    pm.expect(body.data).to.deep.eql(esperado.slice((1 - 1) * 100, 1 * 100));",
+                  "  });",
+                  "  pm.test('Enlaces conservan per_page y filtros enviados', () => {",
+                  "    const keys = [];",
+                  "    if (pm.request.url.toString().includes('per_page=')) keys.push('per_page');",
+                  "    for (const link of [body.links.first, body.links.last, body.links.prev, body.links.next].filter(Boolean)) {",
+                  "      for (const key of keys) pm.expect(link).to.match(new RegExp('[?&]' + key + '='));",
+                  "    }",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "25 Historial: página alta válida",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/reportes/sesiones?per_page=100&page=1000000",
+            "description": "Una página válida fuera del conjunto devuelve data vacío y conserva el total."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "  pm.test('Content-Type JSON', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json'));",
+                  "  const body = pm.response.json();",
+                  "  const referencia = JSON.parse(pm.collectionVariables.get('b3_historial'));",
+                  "  const esperado = referencia;",
+                  "  pm.test('Paginación, campos y tipos de sesiones históricas', () => {",
+                  "    pm.expect(body).to.have.all.keys('data', 'links', 'meta');",
+                  "    pm.expect(body.meta.current_page).to.eql(1000000);",
+                  "    pm.expect(body.meta.per_page).to.eql(100);",
+                  "    pm.expect(body.links).to.have.all.keys('first', 'last', 'prev', 'next');",
+                  "    for (const r of body.data) { ",
+                  "    pm.expect(r).to.have.all.keys('id', 'paciente', 'enfermera', 'ubicacion', 'inicio', 'fin', 'duracion_segundos', 'tipo_solucion', 'vol_total', 'numero_alertas', 'estado');",
+                  "    pm.expect(Number.isSafeInteger(r.id)).to.eql(true);",
+                  "    pm.expect(r.paciente).to.be.a('string');",
+                  "    pm.expect(r.enfermera).to.be.a('string');",
+                  "    pm.expect(r.ubicacion).to.have.all.keys('sala', 'numero_cama');",
+                  "    pm.expect(r.inicio).to.match(/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{6}Z$/);",
+                  "    if (r.fin !== null) pm.expect(r.fin).to.match(/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{6}Z$/);",
+                  "    pm.expect(r.duracion_segundos === null || Number.isFinite(r.duracion_segundos)).to.eql(true);",
+                  "    pm.expect(r.tipo_solucion === null || typeof r.tipo_solucion === 'string').to.eql(true);",
+                  "    pm.expect(r.vol_total === null || Number.isFinite(r.vol_total)).to.eql(true);",
+                  "    pm.expect(Number.isInteger(r.numero_alertas) && r.numero_alertas >= 0).to.eql(true);",
+                  "    pm.expect(r.estado).to.be.oneOf(['ACTIVA', 'PAUSADA', 'FINALIZADA']);",
+                  "    if (r.fin === null) pm.expect(r.duracion_segundos).to.eql(null);",
+                  " }",
+                  "  });",
+                  "  pm.test('Contenido y total coinciden con el historial de referencia', () => {",
+                  "    pm.expect(body.meta.total).to.eql(esperado.length);",
+                  "    pm.expect(body.meta.last_page).to.eql(Math.max(1, Math.ceil(esperado.length / 100)));",
+                  "    pm.expect(body.data).to.deep.eql(esperado.slice((1000000 - 1) * 100, 1000000 * 100));",
+                  "  });",
+                  "  pm.test('Enlaces conservan per_page y filtros enviados', () => {",
+                  "    const keys = [];",
+                  "    if (pm.request.url.toString().includes('per_page=')) keys.push('per_page');",
+                  "    for (const link of [body.links.first, body.links.last, body.links.prev, body.links.next].filter(Boolean)) {",
+                  "      for (const key of keys) pm.expect(link).to.match(new RegExp('[?&]' + key + '='));",
+                  "    }",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "26 Historial: limit no es alias",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/reportes/sesiones?limit=1&page=1",
+            "description": "limit se ignora; se mantienen las 10 filas por página predeterminadas."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "  pm.test('Content-Type JSON', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json'));",
+                  "  const body = pm.response.json();",
+                  "  const referencia = JSON.parse(pm.collectionVariables.get('b3_historial'));",
+                  "  const esperado = referencia;",
+                  "  pm.test('Paginación, campos y tipos de sesiones históricas', () => {",
+                  "    pm.expect(body).to.have.all.keys('data', 'links', 'meta');",
+                  "    pm.expect(body.meta.current_page).to.eql(1);",
+                  "    pm.expect(body.meta.per_page).to.eql(10);",
+                  "    pm.expect(body.links).to.have.all.keys('first', 'last', 'prev', 'next');",
+                  "    for (const r of body.data) { ",
+                  "    pm.expect(r).to.have.all.keys('id', 'paciente', 'enfermera', 'ubicacion', 'inicio', 'fin', 'duracion_segundos', 'tipo_solucion', 'vol_total', 'numero_alertas', 'estado');",
+                  "    pm.expect(Number.isSafeInteger(r.id)).to.eql(true);",
+                  "    pm.expect(r.paciente).to.be.a('string');",
+                  "    pm.expect(r.enfermera).to.be.a('string');",
+                  "    pm.expect(r.ubicacion).to.have.all.keys('sala', 'numero_cama');",
+                  "    pm.expect(r.inicio).to.match(/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{6}Z$/);",
+                  "    if (r.fin !== null) pm.expect(r.fin).to.match(/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{6}Z$/);",
+                  "    pm.expect(r.duracion_segundos === null || Number.isFinite(r.duracion_segundos)).to.eql(true);",
+                  "    pm.expect(r.tipo_solucion === null || typeof r.tipo_solucion === 'string').to.eql(true);",
+                  "    pm.expect(r.vol_total === null || Number.isFinite(r.vol_total)).to.eql(true);",
+                  "    pm.expect(Number.isInteger(r.numero_alertas) && r.numero_alertas >= 0).to.eql(true);",
+                  "    pm.expect(r.estado).to.be.oneOf(['ACTIVA', 'PAUSADA', 'FINALIZADA']);",
+                  "    if (r.fin === null) pm.expect(r.duracion_segundos).to.eql(null);",
+                  " }",
+                  "  });",
+                  "  pm.test('Contenido y total coinciden con el historial de referencia', () => {",
+                  "    pm.expect(body.meta.total).to.eql(esperado.length);",
+                  "    pm.expect(body.meta.last_page).to.eql(Math.max(1, Math.ceil(esperado.length / 10)));",
+                  "    pm.expect(body.data).to.deep.eql(esperado.slice((1 - 1) * 10, 1 * 10));",
+                  "  });",
+                  "  pm.test('Enlaces conservan per_page y filtros enviados', () => {",
+                  "    const keys = [];",
+                  "    if (pm.request.url.toString().includes('per_page=')) keys.push('per_page');",
+                  "    for (const link of [body.links.first, body.links.last, body.links.prev, body.links.next].filter(Boolean)) {",
+                  "      for (const key of keys) pm.expect(link).to.match(new RegExp('[?&]' + key + '='));",
+                  "    }",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "27 Historial: los cinco filtros",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/reportes/sesiones?fecha_inicio={{b3_fecha}}&fecha_fin={{b3_fecha}}&paciente_id={{b3_paciente_id}}&sala={{b3_sala_uri}}&enfermera_id={{b3_enfermera_id}}&per_page=100&page=1",
+            "description": "Filtra por fecha de inicio de la sesión, paciente, sala y enfermera asignada; conserva los parámetros en los enlaces."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "  pm.test('Content-Type JSON', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json'));",
+                  "  const body = pm.response.json();",
+                  "  const referencia = JSON.parse(pm.collectionVariables.get('b3_historial'));",
+                  "  ",
+                  "  pm.test('Paginación, campos y tipos de sesiones históricas', () => {",
+                  "    pm.expect(body).to.have.all.keys('data', 'links', 'meta');",
+                  "    pm.expect(body.meta.current_page).to.eql(1);",
+                  "    pm.expect(body.meta.per_page).to.eql(100);",
+                  "    pm.expect(body.links).to.have.all.keys('first', 'last', 'prev', 'next');",
+                  "    for (const r of body.data) { ",
+                  "    pm.expect(r).to.have.all.keys('id', 'paciente', 'enfermera', 'ubicacion', 'inicio', 'fin', 'duracion_segundos', 'tipo_solucion', 'vol_total', 'numero_alertas', 'estado');",
+                  "    pm.expect(Number.isSafeInteger(r.id)).to.eql(true);",
+                  "    pm.expect(r.paciente).to.be.a('string');",
+                  "    pm.expect(r.enfermera).to.be.a('string');",
+                  "    pm.expect(r.ubicacion).to.have.all.keys('sala', 'numero_cama');",
+                  "    pm.expect(r.inicio).to.match(/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{6}Z$/);",
+                  "    if (r.fin !== null) pm.expect(r.fin).to.match(/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{6}Z$/);",
+                  "    pm.expect(r.duracion_segundos === null || Number.isFinite(r.duracion_segundos)).to.eql(true);",
+                  "    pm.expect(r.tipo_solucion === null || typeof r.tipo_solucion === 'string').to.eql(true);",
+                  "    pm.expect(r.vol_total === null || Number.isFinite(r.vol_total)).to.eql(true);",
+                  "    pm.expect(Number.isInteger(r.numero_alertas) && r.numero_alertas >= 0).to.eql(true);",
+                  "    pm.expect(r.estado).to.be.oneOf(['ACTIVA', 'PAUSADA', 'FINALIZADA']);",
+                  "    if (r.fin === null) pm.expect(r.duracion_segundos).to.eql(null);",
+                  " }",
+                  "  });",
+                  "  pm.test('Los filtros conservan la sesión seleccionada y los datos de la referencia', () => {",
+                  "    pm.expect(body.meta.total).to.be.at.least(1);",
+                  "    for (const r of body.data) {",
+                  "      pm.expect(r).to.deep.eql(referencia.find(original => original.id === r.id));",
+                  "      pm.expect(r.paciente).to.eql(pm.collectionVariables.get('b3_paciente_nombre'));",
+                  "      pm.expect(r.enfermera).to.eql(pm.collectionVariables.get('b3_enfermera_nombre'));",
+                  "      pm.expect(r.inicio.slice(0, 10)).to.eql(pm.collectionVariables.get('b3_fecha')); pm.expect(r.ubicacion.sala).to.eql(decodeURIComponent(pm.collectionVariables.get('b3_sala_uri')));",
+                  "    }",
+                  "  });",
+                  "  pm.test('Enlaces conservan per_page y filtros enviados', () => {",
+                  "    const keys = [\"fecha_inicio\",\"fecha_fin\",\"paciente_id\",\"sala\",\"enfermera_id\"];",
+                  "    if (pm.request.url.toString().includes('per_page=')) keys.push('per_page');",
+                  "    for (const link of [body.links.first, body.links.last, body.links.prev, body.links.next].filter(Boolean)) {",
+                  "      for (const key of keys) pm.expect(link).to.match(new RegExp('[?&]' + key + '='));",
+                  "    }",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "28 Historial: filtro por día",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/reportes/sesiones?fecha_inicio={{b3_fecha}}&fecha_fin={{b3_fecha}}&per_page=100&page=1",
+            "description": "Compara los resultados con el día UTC de inicio de cada fila de referencia."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "  pm.test('Content-Type JSON', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json'));",
+                  "  const body = pm.response.json();",
+                  "  const referencia = JSON.parse(pm.collectionVariables.get('b3_historial'));",
+                  "  const esperado = referencia.filter(r => r.inicio.slice(0, 10) === pm.collectionVariables.get('b3_fecha'));",
+                  "  pm.test('Paginación, campos y tipos de sesiones históricas', () => {",
+                  "    pm.expect(body).to.have.all.keys('data', 'links', 'meta');",
+                  "    pm.expect(body.meta.current_page).to.eql(1);",
+                  "    pm.expect(body.meta.per_page).to.eql(100);",
+                  "    pm.expect(body.links).to.have.all.keys('first', 'last', 'prev', 'next');",
+                  "    for (const r of body.data) { ",
+                  "    pm.expect(r).to.have.all.keys('id', 'paciente', 'enfermera', 'ubicacion', 'inicio', 'fin', 'duracion_segundos', 'tipo_solucion', 'vol_total', 'numero_alertas', 'estado');",
+                  "    pm.expect(Number.isSafeInteger(r.id)).to.eql(true);",
+                  "    pm.expect(r.paciente).to.be.a('string');",
+                  "    pm.expect(r.enfermera).to.be.a('string');",
+                  "    pm.expect(r.ubicacion).to.have.all.keys('sala', 'numero_cama');",
+                  "    pm.expect(r.inicio).to.match(/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{6}Z$/);",
+                  "    if (r.fin !== null) pm.expect(r.fin).to.match(/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{6}Z$/);",
+                  "    pm.expect(r.duracion_segundos === null || Number.isFinite(r.duracion_segundos)).to.eql(true);",
+                  "    pm.expect(r.tipo_solucion === null || typeof r.tipo_solucion === 'string').to.eql(true);",
+                  "    pm.expect(r.vol_total === null || Number.isFinite(r.vol_total)).to.eql(true);",
+                  "    pm.expect(Number.isInteger(r.numero_alertas) && r.numero_alertas >= 0).to.eql(true);",
+                  "    pm.expect(r.estado).to.be.oneOf(['ACTIVA', 'PAUSADA', 'FINALIZADA']);",
+                  "    if (r.fin === null) pm.expect(r.duracion_segundos).to.eql(null);",
+                  " }",
+                  "  });",
+                  "  pm.test('Contenido y total coinciden con el historial de referencia', () => {",
+                  "    pm.expect(body.meta.total).to.eql(esperado.length);",
+                  "    pm.expect(body.meta.last_page).to.eql(Math.max(1, Math.ceil(esperado.length / 100)));",
+                  "    pm.expect(body.data).to.deep.eql(esperado.slice((1 - 1) * 100, 1 * 100));",
+                  "  });",
+                  "  pm.test('Enlaces conservan per_page y filtros enviados', () => {",
+                  "    const keys = [\"fecha_inicio\",\"fecha_fin\"];",
+                  "    if (pm.request.url.toString().includes('per_page=')) keys.push('per_page');",
+                  "    for (const link of [body.links.first, body.links.last, body.links.prev, body.links.next].filter(Boolean)) {",
+                  "      for (const key of keys) pm.expect(link).to.match(new RegExp('[?&]' + key + '='));",
+                  "    }",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "29 Historial: filtro por sala",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/reportes/sesiones?sala={{b3_sala_uri}}&per_page=100&page=1",
+            "description": "Compara la sala exacta con el historial de referencia. La variable ya tiene codificación URL."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "  pm.test('Content-Type JSON', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json'));",
+                  "  const body = pm.response.json();",
+                  "  const referencia = JSON.parse(pm.collectionVariables.get('b3_historial'));",
+                  "  const esperado = referencia.filter(r => r.ubicacion.sala === decodeURIComponent(pm.collectionVariables.get('b3_sala_uri')));",
+                  "  pm.test('Paginación, campos y tipos de sesiones históricas', () => {",
+                  "    pm.expect(body).to.have.all.keys('data', 'links', 'meta');",
+                  "    pm.expect(body.meta.current_page).to.eql(1);",
+                  "    pm.expect(body.meta.per_page).to.eql(100);",
+                  "    pm.expect(body.links).to.have.all.keys('first', 'last', 'prev', 'next');",
+                  "    for (const r of body.data) { ",
+                  "    pm.expect(r).to.have.all.keys('id', 'paciente', 'enfermera', 'ubicacion', 'inicio', 'fin', 'duracion_segundos', 'tipo_solucion', 'vol_total', 'numero_alertas', 'estado');",
+                  "    pm.expect(Number.isSafeInteger(r.id)).to.eql(true);",
+                  "    pm.expect(r.paciente).to.be.a('string');",
+                  "    pm.expect(r.enfermera).to.be.a('string');",
+                  "    pm.expect(r.ubicacion).to.have.all.keys('sala', 'numero_cama');",
+                  "    pm.expect(r.inicio).to.match(/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{6}Z$/);",
+                  "    if (r.fin !== null) pm.expect(r.fin).to.match(/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{6}Z$/);",
+                  "    pm.expect(r.duracion_segundos === null || Number.isFinite(r.duracion_segundos)).to.eql(true);",
+                  "    pm.expect(r.tipo_solucion === null || typeof r.tipo_solucion === 'string').to.eql(true);",
+                  "    pm.expect(r.vol_total === null || Number.isFinite(r.vol_total)).to.eql(true);",
+                  "    pm.expect(Number.isInteger(r.numero_alertas) && r.numero_alertas >= 0).to.eql(true);",
+                  "    pm.expect(r.estado).to.be.oneOf(['ACTIVA', 'PAUSADA', 'FINALIZADA']);",
+                  "    if (r.fin === null) pm.expect(r.duracion_segundos).to.eql(null);",
+                  " }",
+                  "  });",
+                  "  pm.test('Contenido y total coinciden con el historial de referencia', () => {",
+                  "    pm.expect(body.meta.total).to.eql(esperado.length);",
+                  "    pm.expect(body.meta.last_page).to.eql(Math.max(1, Math.ceil(esperado.length / 100)));",
+                  "    pm.expect(body.data).to.deep.eql(esperado.slice((1 - 1) * 100, 1 * 100));",
+                  "  });",
+                  "  pm.test('Enlaces conservan per_page y filtros enviados', () => {",
+                  "    const keys = [\"sala\"];",
+                  "    if (pm.request.url.toString().includes('per_page=')) keys.push('per_page');",
+                  "    for (const link of [body.links.first, body.links.last, body.links.prev, body.links.next].filter(Boolean)) {",
+                  "      for (const key of keys) pm.expect(link).to.match(new RegExp('[?&]' + key + '='));",
+                  "    }",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "30 Historial: filtro por paciente",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/reportes/sesiones?paciente_id={{b3_paciente_id}}&per_page=100&page=1",
+            "description": "Comprueba el nombre del paciente y las filas de referencia. El recurso no expone paciente_id; los feature tests cubren el aislamiento por ID con fixtures."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "  pm.test('Content-Type JSON', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json'));",
+                  "  const body = pm.response.json();",
+                  "  const referencia = JSON.parse(pm.collectionVariables.get('b3_historial'));",
+                  "  ",
+                  "  pm.test('Paginación, campos y tipos de sesiones históricas', () => {",
+                  "    pm.expect(body).to.have.all.keys('data', 'links', 'meta');",
+                  "    pm.expect(body.meta.current_page).to.eql(1);",
+                  "    pm.expect(body.meta.per_page).to.eql(100);",
+                  "    pm.expect(body.links).to.have.all.keys('first', 'last', 'prev', 'next');",
+                  "    for (const r of body.data) { ",
+                  "    pm.expect(r).to.have.all.keys('id', 'paciente', 'enfermera', 'ubicacion', 'inicio', 'fin', 'duracion_segundos', 'tipo_solucion', 'vol_total', 'numero_alertas', 'estado');",
+                  "    pm.expect(Number.isSafeInteger(r.id)).to.eql(true);",
+                  "    pm.expect(r.paciente).to.be.a('string');",
+                  "    pm.expect(r.enfermera).to.be.a('string');",
+                  "    pm.expect(r.ubicacion).to.have.all.keys('sala', 'numero_cama');",
+                  "    pm.expect(r.inicio).to.match(/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{6}Z$/);",
+                  "    if (r.fin !== null) pm.expect(r.fin).to.match(/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{6}Z$/);",
+                  "    pm.expect(r.duracion_segundos === null || Number.isFinite(r.duracion_segundos)).to.eql(true);",
+                  "    pm.expect(r.tipo_solucion === null || typeof r.tipo_solucion === 'string').to.eql(true);",
+                  "    pm.expect(r.vol_total === null || Number.isFinite(r.vol_total)).to.eql(true);",
+                  "    pm.expect(Number.isInteger(r.numero_alertas) && r.numero_alertas >= 0).to.eql(true);",
+                  "    pm.expect(r.estado).to.be.oneOf(['ACTIVA', 'PAUSADA', 'FINALIZADA']);",
+                  "    if (r.fin === null) pm.expect(r.duracion_segundos).to.eql(null);",
+                  " }",
+                  "  });",
+                  "  pm.test('Los filtros conservan la sesión seleccionada y los datos de la referencia', () => {",
+                  "    pm.expect(body.meta.total).to.be.at.least(1);",
+                  "    for (const r of body.data) {",
+                  "      pm.expect(r).to.deep.eql(referencia.find(original => original.id === r.id));",
+                  "      pm.expect(r.paciente).to.eql(pm.collectionVariables.get('b3_paciente_nombre'));",
+                  "      ",
+                  "      ",
+                  "    }",
+                  "  });",
+                  "  pm.test('Enlaces conservan per_page y filtros enviados', () => {",
+                  "    const keys = [\"paciente_id\"];",
+                  "    if (pm.request.url.toString().includes('per_page=')) keys.push('per_page');",
+                  "    for (const link of [body.links.first, body.links.last, body.links.prev, body.links.next].filter(Boolean)) {",
+                  "      for (const key of keys) pm.expect(link).to.match(new RegExp('[?&]' + key + '='));",
+                  "    }",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "31 Historial: filtro por enfermera",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/reportes/sesiones?enfermera_id={{b3_enfermera_id}}&per_page=100&page=1",
+            "description": "Comprueba la enfermera asignada a la sesión y las filas de referencia."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "  pm.test('Content-Type JSON', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json'));",
+                  "  const body = pm.response.json();",
+                  "  const referencia = JSON.parse(pm.collectionVariables.get('b3_historial'));",
+                  "  ",
+                  "  pm.test('Paginación, campos y tipos de sesiones históricas', () => {",
+                  "    pm.expect(body).to.have.all.keys('data', 'links', 'meta');",
+                  "    pm.expect(body.meta.current_page).to.eql(1);",
+                  "    pm.expect(body.meta.per_page).to.eql(100);",
+                  "    pm.expect(body.links).to.have.all.keys('first', 'last', 'prev', 'next');",
+                  "    for (const r of body.data) { ",
+                  "    pm.expect(r).to.have.all.keys('id', 'paciente', 'enfermera', 'ubicacion', 'inicio', 'fin', 'duracion_segundos', 'tipo_solucion', 'vol_total', 'numero_alertas', 'estado');",
+                  "    pm.expect(Number.isSafeInteger(r.id)).to.eql(true);",
+                  "    pm.expect(r.paciente).to.be.a('string');",
+                  "    pm.expect(r.enfermera).to.be.a('string');",
+                  "    pm.expect(r.ubicacion).to.have.all.keys('sala', 'numero_cama');",
+                  "    pm.expect(r.inicio).to.match(/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{6}Z$/);",
+                  "    if (r.fin !== null) pm.expect(r.fin).to.match(/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{6}Z$/);",
+                  "    pm.expect(r.duracion_segundos === null || Number.isFinite(r.duracion_segundos)).to.eql(true);",
+                  "    pm.expect(r.tipo_solucion === null || typeof r.tipo_solucion === 'string').to.eql(true);",
+                  "    pm.expect(r.vol_total === null || Number.isFinite(r.vol_total)).to.eql(true);",
+                  "    pm.expect(Number.isInteger(r.numero_alertas) && r.numero_alertas >= 0).to.eql(true);",
+                  "    pm.expect(r.estado).to.be.oneOf(['ACTIVA', 'PAUSADA', 'FINALIZADA']);",
+                  "    if (r.fin === null) pm.expect(r.duracion_segundos).to.eql(null);",
+                  " }",
+                  "  });",
+                  "  pm.test('Los filtros conservan la sesión seleccionada y los datos de la referencia', () => {",
+                  "    pm.expect(body.meta.total).to.be.at.least(1);",
+                  "    for (const r of body.data) {",
+                  "      pm.expect(r).to.deep.eql(referencia.find(original => original.id === r.id));",
+                  "      ",
+                  "      pm.expect(r.enfermera).to.eql(pm.collectionVariables.get('b3_enfermera_nombre'));",
+                  "      ",
+                  "    }",
+                  "  });",
+                  "  pm.test('Enlaces conservan per_page y filtros enviados', () => {",
+                  "    const keys = [\"enfermera_id\"];",
+                  "    if (pm.request.url.toString().includes('per_page=')) keys.push('per_page');",
+                  "    for (const link of [body.links.first, body.links.last, body.links.prev, body.links.next].filter(Boolean)) {",
+                  "      for (const key of keys) pm.expect(link).to.match(new RegExp('[?&]' + key + '='));",
+                  "    }",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "32 Historial: filtros contradictorios sin coincidencias",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/reportes/sesiones?paciente_id={{b3_paciente_id}}&sala={{b3_sala_sin_coincidencias_uri}}&per_page=10&page=1",
+            "description": "Paciente real combinado con una sala distinta de la suya. Exige data vacío y total cero."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "  pm.test('Content-Type JSON', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json'));",
+                  "  const body = pm.response.json();",
+                  "  const referencia = JSON.parse(pm.collectionVariables.get('b3_historial'));",
+                  "  const esperado = [];",
+                  "  pm.test('Paginación, campos y tipos de sesiones históricas', () => {",
+                  "    pm.expect(body).to.have.all.keys('data', 'links', 'meta');",
+                  "    pm.expect(body.meta.current_page).to.eql(1);",
+                  "    pm.expect(body.meta.per_page).to.eql(10);",
+                  "    pm.expect(body.links).to.have.all.keys('first', 'last', 'prev', 'next');",
+                  "    for (const r of body.data) { ",
+                  "    pm.expect(r).to.have.all.keys('id', 'paciente', 'enfermera', 'ubicacion', 'inicio', 'fin', 'duracion_segundos', 'tipo_solucion', 'vol_total', 'numero_alertas', 'estado');",
+                  "    pm.expect(Number.isSafeInteger(r.id)).to.eql(true);",
+                  "    pm.expect(r.paciente).to.be.a('string');",
+                  "    pm.expect(r.enfermera).to.be.a('string');",
+                  "    pm.expect(r.ubicacion).to.have.all.keys('sala', 'numero_cama');",
+                  "    pm.expect(r.inicio).to.match(/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{6}Z$/);",
+                  "    if (r.fin !== null) pm.expect(r.fin).to.match(/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{6}Z$/);",
+                  "    pm.expect(r.duracion_segundos === null || Number.isFinite(r.duracion_segundos)).to.eql(true);",
+                  "    pm.expect(r.tipo_solucion === null || typeof r.tipo_solucion === 'string').to.eql(true);",
+                  "    pm.expect(r.vol_total === null || Number.isFinite(r.vol_total)).to.eql(true);",
+                  "    pm.expect(Number.isInteger(r.numero_alertas) && r.numero_alertas >= 0).to.eql(true);",
+                  "    pm.expect(r.estado).to.be.oneOf(['ACTIVA', 'PAUSADA', 'FINALIZADA']);",
+                  "    if (r.fin === null) pm.expect(r.duracion_segundos).to.eql(null);",
+                  " }",
+                  "  });",
+                  "  pm.test('Contenido y total coinciden con el historial de referencia', () => {",
+                  "    pm.expect(body.meta.total).to.eql(esperado.length);",
+                  "    pm.expect(body.meta.last_page).to.eql(Math.max(1, Math.ceil(esperado.length / 10)));",
+                  "    pm.expect(body.data).to.deep.eql(esperado.slice((1 - 1) * 10, 1 * 10));",
+                  "  });",
+                  "  pm.test('Enlaces conservan per_page y filtros enviados', () => {",
+                  "    const keys = [\"paciente_id\",\"sala\"];",
+                  "    if (pm.request.url.toString().includes('per_page=')) keys.push('per_page');",
+                  "    for (const link of [body.links.first, body.links.last, body.links.prev, body.links.next].filter(Boolean)) {",
+                  "      for (const key of keys) pm.expect(link).to.match(new RegExp('[?&]' + key + '='));",
+                  "    }",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "04 Errores de historial (K2)",
+      "description": "Rechazo 422 de filtros y paginación inválidos; no confundir con normalización de lecturas.",
+      "item": [
+        {
+          "name": "33 Historial 422: fecha imposible",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/reportes/sesiones?fecha_inicio=2026-02-30",
+            "description": "Error de validación esperado en errors.fecha_inicio. No se normaliza como en la API de lecturas."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 422', () => pm.response.to.have.status(422));",
+                  "pm.test('Content-Type JSON', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json'));",
+                  "if (pm.response.code === 422) {",
+                  "  pm.test('La validación identifica fecha_inicio', () => {",
+                  "    pm.expect(pm.response.json().errors).to.have.property('fecha_inicio').that.is.an('array').that.is.not.empty;",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": [
+            {
+              "name": "Ejemplo 422 (mensaje ilustrativo)",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": "{{base_url}}/api/reportes/sesiones?fecha_inicio=2026-02-30",
+                "description": "Error de validación esperado en errors.fecha_inicio. No se normaliza como en la API de lecturas."
+              },
+              "status": "Unprocessable Entity",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"message\": \"Valor inválido.\",\n  \"errors\": {\n    \"fecha_inicio\": [\n      \"Valor inválido.\"\n    ]\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "34 Historial 422: rango invertido",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/reportes/sesiones?fecha_inicio=2026-11-30&fecha_fin=2026-11-01",
+            "description": "Error de validación esperado en errors.fecha_fin. No se normaliza como en la API de lecturas."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 422', () => pm.response.to.have.status(422));",
+                  "pm.test('Content-Type JSON', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json'));",
+                  "if (pm.response.code === 422) {",
+                  "  pm.test('La validación identifica fecha_fin', () => {",
+                  "    pm.expect(pm.response.json().errors).to.have.property('fecha_fin').that.is.an('array').that.is.not.empty;",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": [
+            {
+              "name": "Ejemplo 422 (mensaje ilustrativo)",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": "{{base_url}}/api/reportes/sesiones?fecha_inicio=2026-11-30&fecha_fin=2026-11-01",
+                "description": "Error de validación esperado en errors.fecha_fin. No se normaliza como en la API de lecturas."
+              },
+              "status": "Unprocessable Entity",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"message\": \"Valor inválido.\",\n  \"errors\": {\n    \"fecha_fin\": [\n      \"Valor inválido.\"\n    ]\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "35 Historial 422: paciente inválido",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/reportes/sesiones?paciente_id=abc",
+            "description": "Error de validación esperado en errors.paciente_id. No se normaliza como en la API de lecturas."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 422', () => pm.response.to.have.status(422));",
+                  "pm.test('Content-Type JSON', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json'));",
+                  "if (pm.response.code === 422) {",
+                  "  pm.test('La validación identifica paciente_id', () => {",
+                  "    pm.expect(pm.response.json().errors).to.have.property('paciente_id').that.is.an('array').that.is.not.empty;",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": [
+            {
+              "name": "Ejemplo 422 (mensaje ilustrativo)",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": "{{base_url}}/api/reportes/sesiones?paciente_id=abc",
+                "description": "Error de validación esperado en errors.paciente_id. No se normaliza como en la API de lecturas."
+              },
+              "status": "Unprocessable Entity",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"message\": \"Valor inválido.\",\n  \"errors\": {\n    \"paciente_id\": [\n      \"Valor inválido.\"\n    ]\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "36 Historial 422: sala demasiado larga",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/reportes/sesiones?sala=SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS",
+            "description": "Error de validación esperado en errors.sala. No se normaliza como en la API de lecturas."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 422', () => pm.response.to.have.status(422));",
+                  "pm.test('Content-Type JSON', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json'));",
+                  "if (pm.response.code === 422) {",
+                  "  pm.test('La validación identifica sala', () => {",
+                  "    pm.expect(pm.response.json().errors).to.have.property('sala').that.is.an('array').that.is.not.empty;",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": [
+            {
+              "name": "Ejemplo 422 (mensaje ilustrativo)",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": "{{base_url}}/api/reportes/sesiones?sala=SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS",
+                "description": "Error de validación esperado en errors.sala. No se normaliza como en la API de lecturas."
+              },
+              "status": "Unprocessable Entity",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"message\": \"Valor inválido.\",\n  \"errors\": {\n    \"sala\": [\n      \"Valor inválido.\"\n    ]\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "37 Historial 422: enfermera fraccionaria",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/reportes/sesiones?enfermera_id=1.5",
+            "description": "Error de validación esperado en errors.enfermera_id. No se normaliza como en la API de lecturas."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 422', () => pm.response.to.have.status(422));",
+                  "pm.test('Content-Type JSON', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json'));",
+                  "if (pm.response.code === 422) {",
+                  "  pm.test('La validación identifica enfermera_id', () => {",
+                  "    pm.expect(pm.response.json().errors).to.have.property('enfermera_id').that.is.an('array').that.is.not.empty;",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": [
+            {
+              "name": "Ejemplo 422 (mensaje ilustrativo)",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": "{{base_url}}/api/reportes/sesiones?enfermera_id=1.5",
+                "description": "Error de validación esperado en errors.enfermera_id. No se normaliza como en la API de lecturas."
+              },
+              "status": "Unprocessable Entity",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"message\": \"Valor inválido.\",\n  \"errors\": {\n    \"enfermera_id\": [\n      \"Valor inválido.\"\n    ]\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "38 Historial 422: per_page cero",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/reportes/sesiones?per_page=0",
+            "description": "Error de validación esperado en errors.per_page. No se normaliza como en la API de lecturas."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 422', () => pm.response.to.have.status(422));",
+                  "pm.test('Content-Type JSON', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json'));",
+                  "if (pm.response.code === 422) {",
+                  "  pm.test('La validación identifica per_page', () => {",
+                  "    pm.expect(pm.response.json().errors).to.have.property('per_page').that.is.an('array').that.is.not.empty;",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": [
+            {
+              "name": "Ejemplo 422 (mensaje ilustrativo)",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": "{{base_url}}/api/reportes/sesiones?per_page=0",
+                "description": "Error de validación esperado en errors.per_page. No se normaliza como en la API de lecturas."
+              },
+              "status": "Unprocessable Entity",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"message\": \"Valor inválido.\",\n  \"errors\": {\n    \"per_page\": [\n      \"Valor inválido.\"\n    ]\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "39 Historial 422: per_page supera máximo",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/reportes/sesiones?per_page=101",
+            "description": "Error de validación esperado en errors.per_page. No se normaliza como en la API de lecturas."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 422', () => pm.response.to.have.status(422));",
+                  "pm.test('Content-Type JSON', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json'));",
+                  "if (pm.response.code === 422) {",
+                  "  pm.test('La validación identifica per_page', () => {",
+                  "    pm.expect(pm.response.json().errors).to.have.property('per_page').that.is.an('array').that.is.not.empty;",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": [
+            {
+              "name": "Ejemplo 422 (mensaje ilustrativo)",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": "{{base_url}}/api/reportes/sesiones?per_page=101",
+                "description": "Error de validación esperado en errors.per_page. No se normaliza como en la API de lecturas."
+              },
+              "status": "Unprocessable Entity",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"message\": \"Valor inválido.\",\n  \"errors\": {\n    \"per_page\": [\n      \"Valor inválido.\"\n    ]\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "40 Historial 422: per_page no entero",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/reportes/sesiones?per_page=diez",
+            "description": "Error de validación esperado en errors.per_page. No se normaliza como en la API de lecturas."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 422', () => pm.response.to.have.status(422));",
+                  "pm.test('Content-Type JSON', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json'));",
+                  "if (pm.response.code === 422) {",
+                  "  pm.test('La validación identifica per_page', () => {",
+                  "    pm.expect(pm.response.json().errors).to.have.property('per_page').that.is.an('array').that.is.not.empty;",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": [
+            {
+              "name": "Ejemplo 422 (mensaje ilustrativo)",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": "{{base_url}}/api/reportes/sesiones?per_page=diez",
+                "description": "Error de validación esperado en errors.per_page. No se normaliza como en la API de lecturas."
+              },
+              "status": "Unprocessable Entity",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"message\": \"Valor inválido.\",\n  \"errors\": {\n    \"per_page\": [\n      \"Valor inválido.\"\n    ]\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "41 Historial 422: page cero",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/reportes/sesiones?page=0",
+            "description": "Error de validación esperado en errors.page. No se normaliza como en la API de lecturas."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 422', () => pm.response.to.have.status(422));",
+                  "pm.test('Content-Type JSON', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json'));",
+                  "if (pm.response.code === 422) {",
+                  "  pm.test('La validación identifica page', () => {",
+                  "    pm.expect(pm.response.json().errors).to.have.property('page').that.is.an('array').that.is.not.empty;",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": [
+            {
+              "name": "Ejemplo 422 (mensaje ilustrativo)",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": "{{base_url}}/api/reportes/sesiones?page=0",
+                "description": "Error de validación esperado en errors.page. No se normaliza como en la API de lecturas."
+              },
+              "status": "Unprocessable Entity",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"message\": \"Valor inválido.\",\n  \"errors\": {\n    \"page\": [\n      \"Valor inválido.\"\n    ]\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "42 Historial 422: page negativa",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/reportes/sesiones?page=-1",
+            "description": "Error de validación esperado en errors.page. No se normaliza como en la API de lecturas."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 422', () => pm.response.to.have.status(422));",
+                  "pm.test('Content-Type JSON', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json'));",
+                  "if (pm.response.code === 422) {",
+                  "  pm.test('La validación identifica page', () => {",
+                  "    pm.expect(pm.response.json().errors).to.have.property('page').that.is.an('array').that.is.not.empty;",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": [
+            {
+              "name": "Ejemplo 422 (mensaje ilustrativo)",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": "{{base_url}}/api/reportes/sesiones?page=-1",
+                "description": "Error de validación esperado en errors.page. No se normaliza como en la API de lecturas."
+              },
+              "status": "Unprocessable Entity",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"message\": \"Valor inválido.\",\n  \"errors\": {\n    \"page\": [\n      \"Valor inválido.\"\n    ]\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "43 Historial 422: page supera máximo",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/reportes/sesiones?page=1000001",
+            "description": "Error de validación esperado en errors.page. No se normaliza como en la API de lecturas."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 422', () => pm.response.to.have.status(422));",
+                  "pm.test('Content-Type JSON', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json'));",
+                  "if (pm.response.code === 422) {",
+                  "  pm.test('La validación identifica page', () => {",
+                  "    pm.expect(pm.response.json().errors).to.have.property('page').that.is.an('array').that.is.not.empty;",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": [
+            {
+              "name": "Ejemplo 422 (mensaje ilustrativo)",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": "{{base_url}}/api/reportes/sesiones?page=1000001",
+                "description": "Error de validación esperado en errors.page. No se normaliza como en la API de lecturas."
+              },
+              "status": "Unprocessable Entity",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"message\": \"Valor inválido.\",\n  \"errors\": {\n    \"page\": [\n      \"Valor inválido.\"\n    ]\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "44 Historial 422: page fraccionaria",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/reportes/sesiones?page=1.5",
+            "description": "Error de validación esperado en errors.page. No se normaliza como en la API de lecturas."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 422', () => pm.response.to.have.status(422));",
+                  "pm.test('Content-Type JSON', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json'));",
+                  "if (pm.response.code === 422) {",
+                  "  pm.test('La validación identifica page', () => {",
+                  "    pm.expect(pm.response.json().errors).to.have.property('page').that.is.an('array').that.is.not.empty;",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": [
+            {
+              "name": "Ejemplo 422 (mensaje ilustrativo)",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": "{{base_url}}/api/reportes/sesiones?page=1.5",
+                "description": "Error de validación esperado en errors.page. No se normaliza como en la API de lecturas."
+              },
+              "status": "Unprocessable Entity",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"message\": \"Valor inválido.\",\n  \"errors\": {\n    \"page\": [\n      \"Valor inválido.\"\n    ]\n  }\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "05 Auditoría de alertas (K2)",
+      "description": "Conteo por alerta distinta, atenciones no resolutivas, orden y errores 404.",
+      "item": [
+        {
+          "name": "45 Auditoría de una sesión descubierta",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/reportes/sesiones/{{b3_sesion_auditoria_id}}/alertas",
+            "description": "Prefiere una sesión con alertas si existe. Una fila por atención; los IDs de alerta pueden repetirse. Si no tiene alertas, exige data vacío mediante el conteo de IDs."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "  pm.test('Content-Type JSON', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json'));",
+                  "  const body = pm.response.json();",
+                  "  pm.test('Auditoría: campos, tipos, nulos y tiempos resolutivos', () => {",
+                  "    pm.expect(body).to.have.all.keys('data');",
+                  "    pm.expect(body.data).to.be.an('array');",
+                  "    for (const r of body.data) {",
+                  "      pm.expect(r).to.have.all.keys('id', 'tipo', 'hora', 'descripcion', 'atendida_por', 'resolvio', 'tiempo_respuesta');",
+                  "      pm.expect(Number.isSafeInteger(r.id)).to.eql(true);",
+                  "      pm.expect(r.tipo).to.be.a('string');",
+                  "      pm.expect(r.hora).to.match(/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{6}Z$/);",
+                  "      pm.expect(r.descripcion === null || typeof r.descripcion === 'string').to.eql(true);",
+                  "      pm.expect(r.atendida_por === null || typeof r.atendida_por === 'string').to.eql(true);",
+                  "      pm.expect(r.resolvio === null || typeof r.resolvio === 'boolean').to.eql(true);",
+                  "      if (r.resolvio === true) {",
+                  "        pm.expect(r.tiempo_respuesta).to.be.a('number');",
+                  "      } else {",
+                  "        pm.expect(r.tiempo_respuesta).to.eql(null);",
+                  "      }",
+                  "      if (r.resolvio === null) pm.expect(r.atendida_por).to.eql(null);",
+                  "    }",
+                  "  });",
+                  "  pm.test('IDs de alertas distintos coinciden con numero_alertas del historial', () => {",
+                  "    const cantidad = new Set(body.data.map(r => r.id)).size;",
+                  "    pm.expect(cantidad).to.eql(Number(pm.collectionVariables.get('b3_numero_alertas_auditoria')));",
+                  "  });",
+                  "  pm.test('Orden ascendente de las alertas', () => {",
+                  "    for (let i = 1; i < body.data.length; i++) {",
+                  "      const a = body.data[i - 1], b = body.data[i];",
+                  "      pm.expect(a.hora < b.hora || (a.hora === b.hora && a.id <= b.id)).to.eql(true);",
+                  "    }",
+                  "  });",
+                  "}",
+                  "if (pm.response.code === 200) pm.collectionVariables.set('b3_auditoria', JSON.stringify(pm.response.json().data));"
+                ]
+              }
+            }
+          ],
+          "response": [
+            {
+              "name": "Ejemplo ilustrativo: atención no resolutiva y resolutiva",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": "{{base_url}}/api/reportes/sesiones/{{b3_sesion_auditoria_id}}/alertas",
+                "description": "Prefiere una sesión con alertas si existe. Una fila por atención; los IDs de alerta pueden repetirse. Si no tiene alertas, exige data vacío mediante el conteo de IDs."
+              },
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"data\": [\n    {\n      \"id\": 101,\n      \"tipo\": \"GOTEO_LENTO\",\n      \"hora\": \"2026-11-20T00:00:10.000000Z\",\n      \"descripcion\": \"Goteo por debajo del rango\",\n      \"atendida_por\": \"Enfermera de ejemplo\",\n      \"resolvio\": false,\n      \"tiempo_respuesta\": null\n    },\n    {\n      \"id\": 101,\n      \"tipo\": \"GOTEO_LENTO\",\n      \"hora\": \"2026-11-20T00:00:10.000000Z\",\n      \"descripcion\": \"Goteo por debajo del rango\",\n      \"atendida_por\": \"Enfermera de ejemplo\",\n      \"resolvio\": true,\n      \"tiempo_respuesta\": 90\n    }\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "46 Auditoría no pagina ni filtra por query",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/reportes/sesiones/{{b3_sesion_auditoria_id}}/alertas?page=0&per_page=0&fecha_inicio=2026-02-30",
+            "description": "Estos parámetros no forman parte del contrato de auditoría y se ignoran; no corresponden los 422 del listado de sesiones."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "  pm.test('Content-Type JSON', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json'));",
+                  "  const body = pm.response.json();",
+                  "  pm.test('Auditoría: campos, tipos, nulos y tiempos resolutivos', () => {",
+                  "    pm.expect(body).to.have.all.keys('data');",
+                  "    pm.expect(body.data).to.be.an('array');",
+                  "    for (const r of body.data) {",
+                  "      pm.expect(r).to.have.all.keys('id', 'tipo', 'hora', 'descripcion', 'atendida_por', 'resolvio', 'tiempo_respuesta');",
+                  "      pm.expect(Number.isSafeInteger(r.id)).to.eql(true);",
+                  "      pm.expect(r.tipo).to.be.a('string');",
+                  "      pm.expect(r.hora).to.match(/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{6}Z$/);",
+                  "      pm.expect(r.descripcion === null || typeof r.descripcion === 'string').to.eql(true);",
+                  "      pm.expect(r.atendida_por === null || typeof r.atendida_por === 'string').to.eql(true);",
+                  "      pm.expect(r.resolvio === null || typeof r.resolvio === 'boolean').to.eql(true);",
+                  "      if (r.resolvio === true) {",
+                  "        pm.expect(r.tiempo_respuesta).to.be.a('number');",
+                  "      } else {",
+                  "        pm.expect(r.tiempo_respuesta).to.eql(null);",
+                  "      }",
+                  "      if (r.resolvio === null) pm.expect(r.atendida_por).to.eql(null);",
+                  "    }",
+                  "  });",
+                  "  pm.test('IDs de alertas distintos coinciden con numero_alertas del historial', () => {",
+                  "    const cantidad = new Set(body.data.map(r => r.id)).size;",
+                  "    pm.expect(cantidad).to.eql(Number(pm.collectionVariables.get('b3_numero_alertas_auditoria')));",
+                  "  });",
+                  "  pm.test('Orden ascendente de las alertas', () => {",
+                  "    for (let i = 1; i < body.data.length; i++) {",
+                  "      const a = body.data[i - 1], b = body.data[i];",
+                  "      pm.expect(a.hora < b.hora || (a.hora === b.hora && a.id <= b.id)).to.eql(true);",
+                  "    }",
+                  "  });",
+                  "}",
+                  "if (pm.response.code === 200) {",
+                  "  pm.test('Query no soportada conserva la auditoría completa', () => pm.expect(pm.response.json().data).to.deep.eql(JSON.parse(pm.collectionVariables.get('b3_auditoria'))));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "47 Auditoría: sesión inexistente",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/reportes/sesiones/{{b3_sesion_ausente_id}}/alertas",
+            "description": "ID negativo ausente elegido automáticamente al recorrer el historial."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 404, no error SQL 500', () => pm.response.to.have.status(404));",
+                  "pm.test('Content-Type JSON', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json'));",
+                  "if (pm.response.code === 404) {",
+                  "  pm.test('Mensaje de error', () => pm.expect(pm.response.json().message).to.eql('Sesión no encontrada.'));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "48 Auditoría: ID inválido",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/reportes/sesiones/abc/alertas",
+            "description": "ID rechazado por el patrón de la ruta."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 404, no error SQL 500', () => pm.response.to.have.status(404));",
+                  "pm.test('Content-Type JSON', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json'));",
+                  "if (pm.response.code === 404) {",
+                  "  pm.test('Mensaje de error', () => pm.expect(pm.response.json().message).to.be.a('string'));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "49 Auditoría: ID supera 18 dígitos",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/reportes/sesiones/1000000000000000000/alertas",
+            "description": "404 de ruta antes de ejecutar SQL."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 404, no error SQL 500', () => pm.response.to.have.status(404));",
+                  "pm.test('Content-Type JSON', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json'));",
+                  "if (pm.response.code === 404) {",
+                  "  pm.test('Mensaje de error', () => pm.expect(pm.response.json().message).to.be.a('string'));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "06 Paginación y serie de lecturas",
+      "description": "Contrasta páginas y serie con el detalle inicial. Pausar el emisor MQTT y otras ediciones durante la ejecución. Con cero lecturas comprueba la variante vacía; para probar offsets con filas reales se necesitan lecturas previas.",
+      "item": [
+        {
+          "name": "50 Historial sin parámetros: última página de 100",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/sesiones/{{b3_sesion_id}}/lecturas",
+            "description": "Preserva el acceso del frontend: data mantiene sus cuatro campos; la página por omisión es la última."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "  pm.test('Content-Type JSON', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json'));",
+                  "  const body = pm.response.json();",
+                  "  const referencia = JSON.parse(pm.collectionVariables.get('b3_lecturas'));",
+                  "  const ultima = Math.max(1, Math.ceil(referencia.length / 100));",
+                  "  const pagina = ultima;",
+                  "  pm.test('Metadatos y envoltura de paginación', () => {",
+                  "    pm.expect(body).to.have.all.keys('data', 'links', 'meta');",
+                  "    pm.expect(body.meta.per_page).to.eql(100);",
+                  "    pm.expect(body.meta.current_page).to.eql(pagina);",
+                  "    pm.expect(body.meta.last_page).to.eql(ultima);",
+                  "    pm.expect(body.meta.total).to.eql(referencia.length);",
+                  "    pm.expect(body.links).to.have.all.keys('first', 'last', 'prev', 'next');",
+                  "  });",
+                  "  pm.test('Contenido exacto de la página respecto del detalle inicial', () => {",
+                  "    pm.expect(body.data).to.deep.eql(referencia.slice((pagina - 1) * 100, pagina * 100));",
+                  "  });",
+                  "  pm.test('Campos, decimales y timestamps conservados', () => {",
+                  "    for (const r of body.data) {",
+                  "      pm.expect(r).to.have.all.keys('gotas_por_min', 'vol_restante', 'tiempo_restante_min', 'timestamp_dispositivo');",
+                  "      pm.expect(r.gotas_por_min).to.be.a('number');",
+                  "      pm.expect(r.vol_restante).to.match(/^-?\\d+\\.\\d{2}$/);",
+                  "      pm.expect(Number.isInteger(r.tiempo_restante_min)).to.eql(true);",
+                  "      pm.expect(r.timestamp_dispositivo).to.match(/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{6}Z$/);",
+                  "    }",
+                  "    for (let i = 1; i < body.data.length; i++) {",
+                  "      pm.expect(body.data[i - 1].timestamp_dispositivo <= body.data[i].timestamp_dispositivo).to.eql(true);",
+                  "    }",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "51 limit=1 y page=1",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/sesiones/{{b3_sesion_id}}/lecturas?limit=1&page=1",
+            "description": "Compara la primera lectura con el detalle inicial."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "  pm.test('Content-Type JSON', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json'));",
+                  "  const body = pm.response.json();",
+                  "  const referencia = JSON.parse(pm.collectionVariables.get('b3_lecturas'));",
+                  "  const ultima = Math.max(1, Math.ceil(referencia.length / 1));",
+                  "  const pagina = 1;",
+                  "  pm.test('Metadatos y envoltura de paginación', () => {",
+                  "    pm.expect(body).to.have.all.keys('data', 'links', 'meta');",
+                  "    pm.expect(body.meta.per_page).to.eql(1);",
+                  "    pm.expect(body.meta.current_page).to.eql(pagina);",
+                  "    pm.expect(body.meta.last_page).to.eql(ultima);",
+                  "    pm.expect(body.meta.total).to.eql(referencia.length);",
+                  "    pm.expect(body.links).to.have.all.keys('first', 'last', 'prev', 'next');",
+                  "  });",
+                  "  pm.test('Contenido exacto de la página respecto del detalle inicial', () => {",
+                  "    pm.expect(body.data).to.deep.eql(referencia.slice((pagina - 1) * 1, pagina * 1));",
+                  "  });",
+                  "  pm.test('Campos, decimales y timestamps conservados', () => {",
+                  "    for (const r of body.data) {",
+                  "      pm.expect(r).to.have.all.keys('gotas_por_min', 'vol_restante', 'tiempo_restante_min', 'timestamp_dispositivo');",
+                  "      pm.expect(r.gotas_por_min).to.be.a('number');",
+                  "      pm.expect(r.vol_restante).to.match(/^-?\\d+\\.\\d{2}$/);",
+                  "      pm.expect(Number.isInteger(r.tiempo_restante_min)).to.eql(true);",
+                  "      pm.expect(r.timestamp_dispositivo).to.match(/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{6}Z$/);",
+                  "    }",
+                  "    for (let i = 1; i < body.data.length; i++) {",
+                  "      pm.expect(body.data[i - 1].timestamp_dispositivo <= body.data[i].timestamp_dispositivo).to.eql(true);",
+                  "    }",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "52 limit=1 y page=2",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/sesiones/{{b3_sesion_id}}/lecturas?limit=1&page=2",
+            "description": "Compara el offset exacto; si hay menos de dos lecturas devuelve data vacío."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "  pm.test('Content-Type JSON', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json'));",
+                  "  const body = pm.response.json();",
+                  "  const referencia = JSON.parse(pm.collectionVariables.get('b3_lecturas'));",
+                  "  const ultima = Math.max(1, Math.ceil(referencia.length / 1));",
+                  "  const pagina = 2;",
+                  "  pm.test('Metadatos y envoltura de paginación', () => {",
+                  "    pm.expect(body).to.have.all.keys('data', 'links', 'meta');",
+                  "    pm.expect(body.meta.per_page).to.eql(1);",
+                  "    pm.expect(body.meta.current_page).to.eql(pagina);",
+                  "    pm.expect(body.meta.last_page).to.eql(ultima);",
+                  "    pm.expect(body.meta.total).to.eql(referencia.length);",
+                  "    pm.expect(body.links).to.have.all.keys('first', 'last', 'prev', 'next');",
+                  "  });",
+                  "  pm.test('Contenido exacto de la página respecto del detalle inicial', () => {",
+                  "    pm.expect(body.data).to.deep.eql(referencia.slice((pagina - 1) * 1, pagina * 1));",
+                  "  });",
+                  "  pm.test('Campos, decimales y timestamps conservados', () => {",
+                  "    for (const r of body.data) {",
+                  "      pm.expect(r).to.have.all.keys('gotas_por_min', 'vol_restante', 'tiempo_restante_min', 'timestamp_dispositivo');",
+                  "      pm.expect(r.gotas_por_min).to.be.a('number');",
+                  "      pm.expect(r.vol_restante).to.match(/^-?\\d+\\.\\d{2}$/);",
+                  "      pm.expect(Number.isInteger(r.tiempo_restante_min)).to.eql(true);",
+                  "      pm.expect(r.timestamp_dispositivo).to.match(/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{6}Z$/);",
+                  "    }",
+                  "    for (let i = 1; i < body.data.length; i++) {",
+                  "      pm.expect(body.data[i - 1].timestamp_dispositivo <= body.data[i].timestamp_dispositivo).to.eql(true);",
+                  "    }",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "53 limit=1 sin page: última página",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/sesiones/{{b3_sesion_id}}/lecturas?limit=1",
+            "description": "Comprueba selección de última página, también en sesión sin lecturas."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "  pm.test('Content-Type JSON', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json'));",
+                  "  const body = pm.response.json();",
+                  "  const referencia = JSON.parse(pm.collectionVariables.get('b3_lecturas'));",
+                  "  const ultima = Math.max(1, Math.ceil(referencia.length / 1));",
+                  "  const pagina = ultima;",
+                  "  pm.test('Metadatos y envoltura de paginación', () => {",
+                  "    pm.expect(body).to.have.all.keys('data', 'links', 'meta');",
+                  "    pm.expect(body.meta.per_page).to.eql(1);",
+                  "    pm.expect(body.meta.current_page).to.eql(pagina);",
+                  "    pm.expect(body.meta.last_page).to.eql(ultima);",
+                  "    pm.expect(body.meta.total).to.eql(referencia.length);",
+                  "    pm.expect(body.links).to.have.all.keys('first', 'last', 'prev', 'next');",
+                  "  });",
+                  "  pm.test('Contenido exacto de la página respecto del detalle inicial', () => {",
+                  "    pm.expect(body.data).to.deep.eql(referencia.slice((pagina - 1) * 1, pagina * 1));",
+                  "  });",
+                  "  pm.test('Campos, decimales y timestamps conservados', () => {",
+                  "    for (const r of body.data) {",
+                  "      pm.expect(r).to.have.all.keys('gotas_por_min', 'vol_restante', 'tiempo_restante_min', 'timestamp_dispositivo');",
+                  "      pm.expect(r.gotas_por_min).to.be.a('number');",
+                  "      pm.expect(r.vol_restante).to.match(/^-?\\d+\\.\\d{2}$/);",
+                  "      pm.expect(Number.isInteger(r.tiempo_restante_min)).to.eql(true);",
+                  "      pm.expect(r.timestamp_dispositivo).to.match(/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{6}Z$/);",
+                  "    }",
+                  "    for (let i = 1; i < body.data.length; i++) {",
+                  "      pm.expect(body.data[i - 1].timestamp_dispositivo <= body.data[i].timestamp_dispositivo).to.eql(true);",
+                  "    }",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "54 per_page tiene prioridad sobre limit",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/sesiones/{{b3_sesion_id}}/lecturas?per_page=2&limit=1&page=1",
+            "description": "per_page=2 prevalece sobre limit=1."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "  pm.test('Content-Type JSON', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json'));",
+                  "  const body = pm.response.json();",
+                  "  const referencia = JSON.parse(pm.collectionVariables.get('b3_lecturas'));",
+                  "  const ultima = Math.max(1, Math.ceil(referencia.length / 2));",
+                  "  const pagina = 1;",
+                  "  pm.test('Metadatos y envoltura de paginación', () => {",
+                  "    pm.expect(body).to.have.all.keys('data', 'links', 'meta');",
+                  "    pm.expect(body.meta.per_page).to.eql(2);",
+                  "    pm.expect(body.meta.current_page).to.eql(pagina);",
+                  "    pm.expect(body.meta.last_page).to.eql(ultima);",
+                  "    pm.expect(body.meta.total).to.eql(referencia.length);",
+                  "    pm.expect(body.links).to.have.all.keys('first', 'last', 'prev', 'next');",
+                  "  });",
+                  "  pm.test('Contenido exacto de la página respecto del detalle inicial', () => {",
+                  "    pm.expect(body.data).to.deep.eql(referencia.slice((pagina - 1) * 2, pagina * 2));",
+                  "  });",
+                  "  pm.test('Campos, decimales y timestamps conservados', () => {",
+                  "    for (const r of body.data) {",
+                  "      pm.expect(r).to.have.all.keys('gotas_por_min', 'vol_restante', 'tiempo_restante_min', 'timestamp_dispositivo');",
+                  "      pm.expect(r.gotas_por_min).to.be.a('number');",
+                  "      pm.expect(r.vol_restante).to.match(/^-?\\d+\\.\\d{2}$/);",
+                  "      pm.expect(Number.isInteger(r.tiempo_restante_min)).to.eql(true);",
+                  "      pm.expect(r.timestamp_dispositivo).to.match(/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{6}Z$/);",
+                  "    }",
+                  "    for (let i = 1; i < body.data.length; i++) {",
+                  "      pm.expect(body.data[i - 1].timestamp_dispositivo <= body.data[i].timestamp_dispositivo).to.eql(true);",
+                  "    }",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "55 Límite máximo normalizado a 500",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/sesiones/{{b3_sesion_id}}/lecturas?limit=9999&page=1",
+            "description": "No es error 422; se aplica el tope de 500."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "  pm.test('Content-Type JSON', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json'));",
+                  "  const body = pm.response.json();",
+                  "  const referencia = JSON.parse(pm.collectionVariables.get('b3_lecturas'));",
+                  "  const ultima = Math.max(1, Math.ceil(referencia.length / 500));",
+                  "  const pagina = 1;",
+                  "  pm.test('Metadatos y envoltura de paginación', () => {",
+                  "    pm.expect(body).to.have.all.keys('data', 'links', 'meta');",
+                  "    pm.expect(body.meta.per_page).to.eql(500);",
+                  "    pm.expect(body.meta.current_page).to.eql(pagina);",
+                  "    pm.expect(body.meta.last_page).to.eql(ultima);",
+                  "    pm.expect(body.meta.total).to.eql(referencia.length);",
+                  "    pm.expect(body.links).to.have.all.keys('first', 'last', 'prev', 'next');",
+                  "  });",
+                  "  pm.test('Contenido exacto de la página respecto del detalle inicial', () => {",
+                  "    pm.expect(body.data).to.deep.eql(referencia.slice((pagina - 1) * 500, pagina * 500));",
+                  "  });",
+                  "  pm.test('Campos, decimales y timestamps conservados', () => {",
+                  "    for (const r of body.data) {",
+                  "      pm.expect(r).to.have.all.keys('gotas_por_min', 'vol_restante', 'tiempo_restante_min', 'timestamp_dispositivo');",
+                  "      pm.expect(r.gotas_por_min).to.be.a('number');",
+                  "      pm.expect(r.vol_restante).to.match(/^-?\\d+\\.\\d{2}$/);",
+                  "      pm.expect(Number.isInteger(r.tiempo_restante_min)).to.eql(true);",
+                  "      pm.expect(r.timestamp_dispositivo).to.match(/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{6}Z$/);",
+                  "    }",
+                  "    for (let i = 1; i < body.data.length; i++) {",
+                  "      pm.expect(body.data[i - 1].timestamp_dispositivo <= body.data[i].timestamp_dispositivo).to.eql(true);",
+                  "    }",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "56 Límite cero normalizado a 1",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/sesiones/{{b3_sesion_id}}/lecturas?limit=0&page=1",
+            "description": "No es error 422; se aplica el mínimo de 1."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "  pm.test('Content-Type JSON', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json'));",
+                  "  const body = pm.response.json();",
+                  "  const referencia = JSON.parse(pm.collectionVariables.get('b3_lecturas'));",
+                  "  const ultima = Math.max(1, Math.ceil(referencia.length / 1));",
+                  "  const pagina = 1;",
+                  "  pm.test('Metadatos y envoltura de paginación', () => {",
+                  "    pm.expect(body).to.have.all.keys('data', 'links', 'meta');",
+                  "    pm.expect(body.meta.per_page).to.eql(1);",
+                  "    pm.expect(body.meta.current_page).to.eql(pagina);",
+                  "    pm.expect(body.meta.last_page).to.eql(ultima);",
+                  "    pm.expect(body.meta.total).to.eql(referencia.length);",
+                  "    pm.expect(body.links).to.have.all.keys('first', 'last', 'prev', 'next');",
+                  "  });",
+                  "  pm.test('Contenido exacto de la página respecto del detalle inicial', () => {",
+                  "    pm.expect(body.data).to.deep.eql(referencia.slice((pagina - 1) * 1, pagina * 1));",
+                  "  });",
+                  "  pm.test('Campos, decimales y timestamps conservados', () => {",
+                  "    for (const r of body.data) {",
+                  "      pm.expect(r).to.have.all.keys('gotas_por_min', 'vol_restante', 'tiempo_restante_min', 'timestamp_dispositivo');",
+                  "      pm.expect(r.gotas_por_min).to.be.a('number');",
+                  "      pm.expect(r.vol_restante).to.match(/^-?\\d+\\.\\d{2}$/);",
+                  "      pm.expect(Number.isInteger(r.tiempo_restante_min)).to.eql(true);",
+                  "      pm.expect(r.timestamp_dispositivo).to.match(/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{6}Z$/);",
+                  "    }",
+                  "    for (let i = 1; i < body.data.length; i++) {",
+                  "      pm.expect(body.data[i - 1].timestamp_dispositivo <= body.data[i].timestamp_dispositivo).to.eql(true);",
+                  "    }",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "57 Límite no numérico normalizado a 100",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/sesiones/{{b3_sesion_id}}/lecturas?limit=abc&page=1",
+            "description": "No es error 422; se usa el valor predeterminado."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "  pm.test('Content-Type JSON', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json'));",
+                  "  const body = pm.response.json();",
+                  "  const referencia = JSON.parse(pm.collectionVariables.get('b3_lecturas'));",
+                  "  const ultima = Math.max(1, Math.ceil(referencia.length / 100));",
+                  "  const pagina = 1;",
+                  "  pm.test('Metadatos y envoltura de paginación', () => {",
+                  "    pm.expect(body).to.have.all.keys('data', 'links', 'meta');",
+                  "    pm.expect(body.meta.per_page).to.eql(100);",
+                  "    pm.expect(body.meta.current_page).to.eql(pagina);",
+                  "    pm.expect(body.meta.last_page).to.eql(ultima);",
+                  "    pm.expect(body.meta.total).to.eql(referencia.length);",
+                  "    pm.expect(body.links).to.have.all.keys('first', 'last', 'prev', 'next');",
+                  "  });",
+                  "  pm.test('Contenido exacto de la página respecto del detalle inicial', () => {",
+                  "    pm.expect(body.data).to.deep.eql(referencia.slice((pagina - 1) * 100, pagina * 100));",
+                  "  });",
+                  "  pm.test('Campos, decimales y timestamps conservados', () => {",
+                  "    for (const r of body.data) {",
+                  "      pm.expect(r).to.have.all.keys('gotas_por_min', 'vol_restante', 'tiempo_restante_min', 'timestamp_dispositivo');",
+                  "      pm.expect(r.gotas_por_min).to.be.a('number');",
+                  "      pm.expect(r.vol_restante).to.match(/^-?\\d+\\.\\d{2}$/);",
+                  "      pm.expect(Number.isInteger(r.tiempo_restante_min)).to.eql(true);",
+                  "      pm.expect(r.timestamp_dispositivo).to.match(/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{6}Z$/);",
+                  "    }",
+                  "    for (let i = 1; i < body.data.length; i++) {",
+                  "      pm.expect(body.data[i - 1].timestamp_dispositivo <= body.data[i].timestamp_dispositivo).to.eql(true);",
+                  "    }",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "58 Página posterior al total",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/sesiones/{{b3_sesion_id}}/lecturas?limit=1&page=999999999",
+            "description": "Debe devolver data vacío y mantener el número de página solicitado."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "  pm.test('Content-Type JSON', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json'));",
+                  "  const body = pm.response.json();",
+                  "  const referencia = JSON.parse(pm.collectionVariables.get('b3_lecturas'));",
+                  "  const ultima = Math.max(1, Math.ceil(referencia.length / 1));",
+                  "  const pagina = 999999999;",
+                  "  pm.test('Metadatos y envoltura de paginación', () => {",
+                  "    pm.expect(body).to.have.all.keys('data', 'links', 'meta');",
+                  "    pm.expect(body.meta.per_page).to.eql(1);",
+                  "    pm.expect(body.meta.current_page).to.eql(pagina);",
+                  "    pm.expect(body.meta.last_page).to.eql(ultima);",
+                  "    pm.expect(body.meta.total).to.eql(referencia.length);",
+                  "    pm.expect(body.links).to.have.all.keys('first', 'last', 'prev', 'next');",
+                  "  });",
+                  "  pm.test('Contenido exacto de la página respecto del detalle inicial', () => {",
+                  "    pm.expect(body.data).to.deep.eql(referencia.slice((pagina - 1) * 1, pagina * 1));",
+                  "  });",
+                  "  pm.test('Campos, decimales y timestamps conservados', () => {",
+                  "    for (const r of body.data) {",
+                  "      pm.expect(r).to.have.all.keys('gotas_por_min', 'vol_restante', 'tiempo_restante_min', 'timestamp_dispositivo');",
+                  "      pm.expect(r.gotas_por_min).to.be.a('number');",
+                  "      pm.expect(r.vol_restante).to.match(/^-?\\d+\\.\\d{2}$/);",
+                  "      pm.expect(Number.isInteger(r.tiempo_restante_min)).to.eql(true);",
+                  "      pm.expect(r.timestamp_dispositivo).to.match(/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{6}Z$/);",
+                  "    }",
+                  "    for (let i = 1; i < body.data.length; i++) {",
+                  "      pm.expect(body.data[i - 1].timestamp_dispositivo <= body.data[i].timestamp_dispositivo).to.eql(true);",
+                  "    }",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "59 page=0 selecciona la última página",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/sesiones/{{b3_sesion_id}}/lecturas?limit=1&page=0",
+            "description": "Documenta la normalización actual de page=0, sin exigir un 422 inexistente."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "  pm.test('Content-Type JSON', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json'));",
+                  "  const body = pm.response.json();",
+                  "  const referencia = JSON.parse(pm.collectionVariables.get('b3_lecturas'));",
+                  "  const ultima = Math.max(1, Math.ceil(referencia.length / 1));",
+                  "  const pagina = ultima;",
+                  "  pm.test('Metadatos y envoltura de paginación', () => {",
+                  "    pm.expect(body).to.have.all.keys('data', 'links', 'meta');",
+                  "    pm.expect(body.meta.per_page).to.eql(1);",
+                  "    pm.expect(body.meta.current_page).to.eql(pagina);",
+                  "    pm.expect(body.meta.last_page).to.eql(ultima);",
+                  "    pm.expect(body.meta.total).to.eql(referencia.length);",
+                  "    pm.expect(body.links).to.have.all.keys('first', 'last', 'prev', 'next');",
+                  "  });",
+                  "  pm.test('Contenido exacto de la página respecto del detalle inicial', () => {",
+                  "    pm.expect(body.data).to.deep.eql(referencia.slice((pagina - 1) * 1, pagina * 1));",
+                  "  });",
+                  "  pm.test('Campos, decimales y timestamps conservados', () => {",
+                  "    for (const r of body.data) {",
+                  "      pm.expect(r).to.have.all.keys('gotas_por_min', 'vol_restante', 'tiempo_restante_min', 'timestamp_dispositivo');",
+                  "      pm.expect(r.gotas_por_min).to.be.a('number');",
+                  "      pm.expect(r.vol_restante).to.match(/^-?\\d+\\.\\d{2}$/);",
+                  "      pm.expect(Number.isInteger(r.tiempo_restante_min)).to.eql(true);",
+                  "      pm.expect(r.timestamp_dispositivo).to.match(/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{6}Z$/);",
+                  "    }",
+                  "    for (let i = 1; i < body.data.length; i++) {",
+                  "      pm.expect(body.data[i - 1].timestamp_dispositivo <= body.data[i].timestamp_dispositivo).to.eql(true);",
+                  "    }",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "60 Serie por query ignora limit/page",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/sesiones/{{b3_sesion_id}}/lecturas?serie=1&limit=1&page=999999999",
+            "description": "Compara todas las lecturas con el detalle, con solo tres campos y sin meta/links."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "  pm.test('Content-Type JSON', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json'));",
+                  "  const body = pm.response.json();",
+                  "  const referencia = JSON.parse(pm.collectionVariables.get('b3_lecturas')).map(r => ({",
+                  "    timestamp_dispositivo: r.timestamp_dispositivo, gotas_por_min: r.gotas_por_min, vol_restante: r.vol_restante",
+                  "  }));",
+                  "  pm.test('Serie completa sin meta, links ni tiempo restante', () => {",
+                  "    pm.expect(body).to.have.all.keys('data');",
+                  "    pm.expect(body.data).to.deep.eql(referencia);",
+                  "    for (const r of body.data) {",
+                  "      pm.expect(r).to.have.all.keys('timestamp_dispositivo', 'gotas_por_min', 'vol_restante');",
+                  "    }",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "61 Serie por ruta dedicada",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/sesiones/{{b3_sesion_id}}/lecturas/serie",
+            "description": "Mismo contenido que serie=1."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "  pm.test('Content-Type JSON', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json'));",
+                  "  const body = pm.response.json();",
+                  "  const referencia = JSON.parse(pm.collectionVariables.get('b3_lecturas')).map(r => ({",
+                  "    timestamp_dispositivo: r.timestamp_dispositivo, gotas_por_min: r.gotas_por_min, vol_restante: r.vol_restante",
+                  "  }));",
+                  "  pm.test('Serie completa sin meta, links ni tiempo restante', () => {",
+                  "    pm.expect(body).to.have.all.keys('data');",
+                  "    pm.expect(body.data).to.deep.eql(referencia);",
+                  "    for (const r of body.data) {",
+                  "      pm.expect(r).to.have.all.keys('timestamp_dispositivo', 'gotas_por_min', 'vol_restante');",
+                  "    }",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "62 Sesión inexistente",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/sesiones/{{b3_sesion_ausente_id}}/lecturas",
+            "description": "El ID ausente se elige automáticamente a partir del historial completo."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 404, nunca SQL 500', () => pm.response.to.have.status(404));",
+                  "pm.test('Content-Type JSON', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json'));",
+                  "if (pm.response.code === 404) {",
+                  "  pm.test('Mensaje de error de sesión inexistente', () => {",
+                  "    pm.expect(pm.response.json().message).to.eql('Sesión no encontrada.');",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "63 Serie de sesión inexistente",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/sesiones/{{b3_sesion_ausente_id}}/lecturas/serie",
+            "description": "Mismo 404 de sesión no encontrada en el alias de serie."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 404, nunca SQL 500', () => pm.response.to.have.status(404));",
+                  "pm.test('Content-Type JSON', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json'));",
+                  "if (pm.response.code === 404) {",
+                  "  pm.test('Mensaje de error de sesión inexistente', () => {",
+                  "    pm.expect(pm.response.json().message).to.eql('Sesión no encontrada.');",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "64 ID con formato inválido",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/sesiones/abc/lecturas",
+            "description": "La restricción de ruta rechaza el ID antes de consultar SQL."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 404, nunca SQL 500', () => pm.response.to.have.status(404));",
+                  "pm.test('Content-Type JSON', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json'));",
+                  "if (pm.response.code === 404) {",
+                  "  pm.test('Mensaje de error', () => {",
+                  "    pm.expect(pm.response.json().message).to.be.a('string');",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "65 ID con más de 18 dígitos",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/sesiones/1000000000000000000/lecturas",
+            "description": "La restricción de ruta rechaza el ID; no genera error de PostgreSQL."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 404, nunca SQL 500', () => pm.response.to.have.status(404));",
+                  "pm.test('Content-Type JSON', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json'));",
+                  "if (pm.response.code === 404) {",
+                  "  pm.test('Mensaje de error', () => {",
+                  "    pm.expect(pm.response.json().message).to.be.a('string');",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
