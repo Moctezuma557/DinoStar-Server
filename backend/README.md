@@ -1,5 +1,16 @@
 # DinoStar: Laravel y Reverb (actividad #6)
 
+## Contratos de reportes y lecturas (B3, #147)
+
+- [API_REPORTES.md](API_REPORTES.md): filtros, KPIs, categorías, historial, auditoría, PDF y errores de K1/K2/B2.
+- [API_SESIONES.md](API_SESIONES.md): `limit`/`per_page`, `page`, serie de tiempo y ejecución local en Windows/macOS.
+- [Colección Postman B3](reportes-lecturas.postman_collection.json): consultas y aserciones con IDs descubiertos automáticamente, sin editar la colección.
+
+K1, K2 y K3 están integrados en `Develop` (`eb59136`). Se verificaron las 28 rutas
+API con Artisan. La corrida local de Windows del 26/11/2026 completó 65 solicitudes
+y 257 aserciones sin fallos. La revisión visual de PDF y la repetición en macOS
+se registran por separado; los comandos están en API_SESIONES.
+
 ## Exportación PDF de reportes (B2, #135)
 
 `GET /api/reportes/exportar` descarga un PDF con `Content-Type: application/pdf`
